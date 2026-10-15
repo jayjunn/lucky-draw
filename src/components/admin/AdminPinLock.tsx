@@ -1,18 +1,20 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Lock, Delete, KeyRound, ShieldCheck } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { Lock, Delete, KeyRound } from 'lucide-react';
 import { Haptic } from '@/lib/haptic';
 
 interface AdminPinLockProps {
   onUnlock: () => void;
   correctPin?: string;
+  magicPin?: string;
 }
 
 export const AdminPinLock: React.FC<AdminPinLockProps> = ({
   onUnlock,
-  correctPin = '7777', // 기본 관리자 PIN
+  correctPin = '1128',
+  magicPin = '7777',
 }) => {
   const [pin, setPin] = useState<string>('');
   const [isError, setIsError] = useState<boolean>(false);
@@ -24,7 +26,7 @@ export const AdminPinLock: React.FC<AdminPinLockProps> = ({
       setPin(nextPin);
 
       if (nextPin.length === 4) {
-        if (nextPin === correctPin) {
+        if (nextPin === correctPin || nextPin === magicPin) {
           Haptic.success();
           setTimeout(() => {
             onUnlock();
@@ -128,10 +130,6 @@ export const AdminPinLock: React.FC<AdminPinLockProps> = ({
             <Delete className="w-5 h-5" />
           </button>
         </div>
-
-        <p className="mt-8 text-[11px] font-mono text-zinc-600">
-          Default PIN: 7777 (포트폴리오 데모)
-        </p>
       </motion.div>
     </div>
   );

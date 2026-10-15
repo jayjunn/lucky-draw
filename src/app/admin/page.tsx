@@ -51,9 +51,9 @@ export default function AdminPage() {
     handleSaveEventName,
   } = useAdmin();
 
-  // PIN 번호 잠금 화면
+  // PIN 번호 잠금 화면 (기본: 1128, 마스터 매직넘버: 7777)
   if (!isUnlocked) {
-    return <AdminPinLock onUnlock={handleUnlock} correctPin="7777" />;
+    return <AdminPinLock onUnlock={handleUnlock} correctPin="1128" magicPin="7777" />;
   }
 
   const prizes = appState?.prizes || [];

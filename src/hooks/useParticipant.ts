@@ -152,35 +152,49 @@ export function useParticipant() {
         }
       }
 
-      // 당첨자 발표 처리 (phase 변화뿐만 아니라 새로운 당첨자가 발표될 때마다 항상 트리거!)
+      // 당첨자 발표 처리
       if (currentPhase === 'ANNOUNCED' && currentWinner) {
+        const isFreshAnnouncement = prevWinnerTimeRef.current !== 0 && winnerTime !== prevWinnerTimeRef.current;
+        const timeSinceAnnouncedSec = winnerTime ? Math.floor((Date.now() - winnerTime) / 1000) : 999;
+
         if (winnerTime !== prevWinnerTimeRef.current) {
           prevWinnerTimeRef.current = winnerTime;
 
           const myNumber = currentMe?.number || (targetId ? parseInt(localStorage.getItem('lucky_draw_participant_number') || '0', 10) : null);
           const isMe = myNumber !== null && myNumber === currentWinner.winnerNumber;
 
-          if (isMe) {
-            triggerWinnerCelebration();
-          } else {
-            soundFX.playCheer();
+          // 실시간으로 방금 발표되었거나 15초 이내의 최신 발표일 때만 축하 효과 발동
+          if (isFreshAnnouncement || timeSinceAnnouncedSec < 15) {
+            if (isMe) {
+              triggerWinnerCelebration();
+            } else {
+              soundFX.playCheer();
+            }
           }
 
-          // 호명 카운트다운 타이머 시작
-          setTimerSeconds(30);
-          if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
-          timerIntervalRef.current = setInterval(() => {
-            setTimerSeconds((prev) => {
-              if (prev === null || prev <= 1) {
-                if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
-                return null;
-              }
-              if (prev <= 6) soundFX.playTick();
-              return prev - 1;
-            });
-          }, 1000);
+          // 호명 카운트다운 타이머:
+          // 발표 후 30초가 이미 지났거나 이전 발표인 경우 타이머를 띄우지 않음!
+          // 실시간 발표이거나 30초 이내인 경우 남은 초만큼만 카운트다운
+          const remainingSec = Math.max(0, 30 - timeSinceAnnouncedSec);
+          if ((isFreshAnnouncement || timeSinceAnnouncedSec < 30) && remainingSec > 0) {
+            setTimerSeconds(remainingSec);
+            if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+            timerIntervalRef.current = setInterval(() => {
+              setTimerSeconds((prev) => {
+                if (prev === null || prev <= 1) {
+                  if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+                  return null;
+                }
+                if (prev <= 6) soundFX.playTick();
+                return prev - 1;
+              });
+            }, 1000);
+          } else {
+            setTimerSeconds(null);
+            if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+          }
         }
-      } else if (currentPhase === 'IDLE') {
+      } else if (currentPhase === 'IDLE' || !currentPhase) {
         prevWinnerTimeRef.current = 0;
         if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
         setTimerSeconds(null);
