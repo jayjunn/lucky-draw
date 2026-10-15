@@ -66,9 +66,16 @@ test.describe('럭키드로우 전체 E2E 실시간 시나리오 테스트', () 
     await expect(nameInput).toBeVisible({ timeout: 10000 });
 
     const testNickName = '테스터_' + Math.floor(Math.random() * 10000);
-    await nameInput.fill(testNickName);
-
     const submitBtn = mobilePage.locator('button:has-text("입장 패스 받기")');
+
+    // 1글자 입력 시 실시간 경고 및 버튼 비활성화 검증
+    await nameInput.fill('테');
+    await expect(mobilePage.locator('text=최소 2글자 이상 입력해주세요')).toBeVisible();
+    await expect(submitBtn).toBeDisabled();
+
+    // 2글자 이상 유효한 닉네임 입력
+    await nameInput.fill(testNickName);
+    await expect(mobilePage.locator('text=사용 가능한 이름입니다')).toBeVisible();
     await submitBtn.click();
 
     // 발급 완료 후 디지털 패스 카드 렌더링 검증

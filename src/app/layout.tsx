@@ -32,7 +32,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ko">
-      <body className="w-full h-full bg-[#08080A] text-[#FAFAFA] antialiased overflow-hidden">
+      <body className="w-full min-h-screen bg-[#08080A] text-[#FAFAFA] antialiased overflow-x-hidden">
         {children}
       </body>
     </html>

@@ -1,6 +1,8 @@
-import React from 'react';
+'use client';
+
+import React, { useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowRight, Clock } from 'lucide-react';
+import { ArrowRight, Clock, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { ThemeStyleConfig } from '@/hooks/useParticipant';
 
 interface CheckInViewProps {
@@ -10,6 +12,7 @@ interface CheckInViewProps {
   isSubmitting: boolean;
   participantCount: number;
   themeCfg: ThemeStyleConfig;
+  existingNames?: string[];
 }
 
 export const CheckInView: React.FC<CheckInViewProps> = ({
@@ -19,7 +22,35 @@ export const CheckInView: React.FC<CheckInViewProps> = ({
   isSubmitting,
   participantCount,
   themeCfg,
+  existingNames = [],
 }) => {
+  const cleanName = nameInput.trim();
+
+  const validationState = useMemo(() => {
+    if (!cleanName) return null;
+    if (cleanName.length < 2) {
+      return {
+        type: 'warning' as const,
+        message: '최소 2글자 이상 입력해주세요.',
+      };
+    }
+    const isDup = existingNames.some(
+      (n) => n.trim().toLowerCase() === cleanName.toLowerCase()
+    );
+    if (isDup) {
+      return {
+        type: 'error' as const,
+        message: '이미 등록된 이름입니다. 다른 이름을 사용해주세요.',
+      };
+    }
+    return {
+      type: 'success' as const,
+      message: '사용 가능한 이름입니다 ✨',
+    };
+  }, [cleanName, existingNames]);
+
+  const isButtonDisabled = isSubmitting || cleanName.length < 2 || validationState?.type === 'error';
+
   return (
     <motion.div
       key="register"
@@ -29,7 +60,7 @@ export const CheckInView: React.FC<CheckInViewProps> = ({
       transition={{ duration: 0.25, ease: 'easeOut' }}
       className="bg-[#141418] border border-white/[0.08] rounded-3xl p-6 shadow-xl space-y-6"
     >
-      <div className="space-y-1.5">
+      <div className="space-y-1.5 text-left">
         <p className="text-[11px] font-semibold text-zinc-400 tracking-wider uppercase">
           Check-in & Pass
         </p>
@@ -37,35 +68,65 @@ export const CheckInView: React.FC<CheckInViewProps> = ({
           럭키드로우 행운 번호를<br />발급받으세요.
         </h2>
         <p className="text-xs text-zinc-400 font-normal leading-relaxed pt-1">
-          이름 또는 닉네임을 입력하시면 1인 1매의 디지털 패스와 고유 추첨 번호가 부여됩니다.
+          이름 또는 닉네임(2글자 이상)을 입력하시면 1인 1매의 디지털 패스와 고유 추첨 번호가 부여됩니다.
         </p>
       </div>
 
-      <form onSubmit={onSubmit} className="space-y-4">
+      <form onSubmit={onSubmit} className="space-y-4 text-left">
         <div className="space-y-1.5">
           <label className="text-[10px] font-bold text-zinc-400 tracking-widest uppercase">
-            Participant Name
+            Participant Name (2글자 이상)
           </label>
           <input
             type="text"
             value={nameInput}
             onChange={(e) => onChangeName(e.target.value)}
-            placeholder="이름 또는 닉네임 입력"
+            placeholder="이름 또는 닉네임 입력 (2글자 이상)"
             maxLength={12}
             required
             autoComplete="off"
             autoCorrect="off"
             enterKeyHint="done"
             disabled={isSubmitting}
-            className="w-full px-4 py-3.5 rounded-2xl bg-white/[0.06] border border-white/15 text-white font-semibold text-base placeholder-zinc-500 focus:outline-none focus:border-white/40 focus:bg-white/[0.1] transition-all disabled:opacity-50"
+            className={`w-full px-4 py-3.5 rounded-2xl bg-white/[0.06] border text-white font-semibold text-base placeholder-zinc-500 focus:outline-none transition-all disabled:opacity-50 ${
+              validationState?.type === 'error'
+                ? 'border-rose-500/70 focus:border-rose-500 bg-rose-500/5'
+                : validationState?.type === 'success'
+                ? 'border-emerald-500/70 focus:border-emerald-500'
+                : 'border-white/15 focus:border-white/40 focus:bg-white/[0.1]'
+            }`}
           />
+
+          {/* 실시간 유효성 피드백 안내 메시지 */}
+          {validationState && (
+            <div className="pt-1 flex items-center gap-1.5 text-xs">
+              {validationState.type === 'error' && (
+                <span className="text-rose-400 flex items-center gap-1 font-medium">
+                  <AlertCircle className="w-3.5 h-3.5" />
+                  {validationState.message}
+                </span>
+              )}
+              {validationState.type === 'warning' && (
+                <span className="text-amber-400 flex items-center gap-1 font-medium">
+                  <AlertCircle className="w-3.5 h-3.5" />
+                  {validationState.message}
+                </span>
+              )}
+              {validationState.type === 'success' && (
+                <span className="text-emerald-400 flex items-center gap-1 font-medium">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  {validationState.message}
+                </span>
+              )}
+            </div>
+          )}
         </div>
 
         <button
           type="submit"
           onClick={(e) => onSubmit(e)}
-          disabled={isSubmitting}
-          className="w-full py-4 rounded-2xl text-black font-extrabold text-sm tracking-wide shadow-lg active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-60 cursor-pointer"
+          disabled={isButtonDisabled}
+          className="w-full py-4 rounded-2xl text-black font-extrabold text-sm tracking-wide shadow-lg active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
           style={{ backgroundColor: themeCfg.accent }}
         >
           {isSubmitting ? (

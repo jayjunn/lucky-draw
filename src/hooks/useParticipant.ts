@@ -66,6 +66,9 @@ export function useParticipant() {
   const [timerSeconds, setTimerSeconds] = useState<number | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const participantRef = useRef<Participant | null>(null);
+  participantRef.current = participant;
+
   const rollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const prevPhaseRef = useRef<string>('IDLE');
   const prevWinnerTimeRef = useRef<number>(0);
@@ -92,17 +95,18 @@ export function useParticipant() {
     } catch {}
   }, [themeCfg.accent]);
 
-  // 실시간 Firebase 리스너 및 로컬 세션 복구 (절대 자동 생성하지 않음!)
+  // 실시간 Firebase 리스너 및 로컬 세션 복구
   useEffect(() => {
-    const savedId = typeof window !== 'undefined' ? localStorage.getItem('lucky_draw_participant_id') : null;
-
     const unsubscribe = subscribeAppState((state: AppState) => {
       setAppState(state);
 
-      // 1. 이미 등록된 참가자라면 세션 동기화
+      // 매 스냅샷마다 최신 세션 ID 확인 (신규 등록 시 즉시 반영 보장)
+      const currentSavedId = typeof window !== 'undefined' ? localStorage.getItem('lucky_draw_participant_id') : null;
+      const targetId = currentSavedId || participantRef.current?.id;
+
       let currentMe: Participant | null = null;
-      if (savedId) {
-        const found = state.participants.find((p) => p.id === savedId);
+      if (targetId) {
+        const found = state.participants.find((p) => p.id === targetId);
         if (found) {
           currentMe = found;
           setParticipant(found);
@@ -120,8 +124,6 @@ export function useParticipant() {
             localStorage.removeItem('lucky_draw_participant_number');
           } catch {}
         }
-      } else {
-        setParticipant(null);
       }
 
       const currentPhase = state.drawState?.phase;
@@ -155,7 +157,7 @@ export function useParticipant() {
         if (winnerTime !== prevWinnerTimeRef.current) {
           prevWinnerTimeRef.current = winnerTime;
 
-          const myNumber = currentMe?.number || (savedId ? parseInt(localStorage.getItem('lucky_draw_participant_number') || '0', 10) : null);
+          const myNumber = currentMe?.number || (targetId ? parseInt(localStorage.getItem('lucky_draw_participant_number') || '0', 10) : null);
           const isMe = myNumber !== null && myNumber === currentWinner.winnerNumber;
 
           if (isMe) {
@@ -217,11 +219,28 @@ export function useParticipant() {
   // 참가자 등록 핸들러
   const handleRegister = useCallback(async (e?: React.FormEvent | React.MouseEvent) => {
     if (e && e.preventDefault) e.preventDefault();
-    if (!nameInput.trim() || isSubmitting) return;
+    const clean = nameInput.trim();
+    if (!clean || isSubmitting) return;
+
+    if (clean.length < 2) {
+      Haptic.warning();
+      alert('이름(닉네임)은 최소 2글자 이상 입력해주세요.');
+      return;
+    }
+
+    // 클라이언트 사전 중복 검사
+    const isDup = (appState?.participants || []).some(
+      (p) => p.name.trim().toLowerCase() === clean.toLowerCase()
+    );
+    if (isDup) {
+      Haptic.warning();
+      alert(`'${clean}'(은)는 이미 등록된 이름입니다. 다른 이름을 입력해주세요.`);
+      return;
+    }
 
     try {
       setIsSubmitting(true);
-      const newPart = await registerParticipantDirect(nameInput.trim());
+      const newPart = await registerParticipantDirect(clean);
       if (newPart) {
         setParticipant(newPart);
 
@@ -245,7 +264,7 @@ export function useParticipant() {
     } finally {
       setIsSubmitting(false);
     }
-  }, [nameInput, isSubmitting]);
+  }, [nameInput, isSubmitting, appState?.participants]);
 
   // 당첨자 출석 확인 핸들러
   const handleConfirmPresence = useCallback(async () => {

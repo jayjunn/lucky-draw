@@ -95,6 +95,7 @@ export default function ParticipantPage() {
             isSubmitting={isSubmitting}
             participantCount={appState?.participants?.length || 0}
             themeCfg={themeCfg}
+            existingNames={appState?.participants?.map((p) => p.name) || []}
           />
         ) : (
           <motion.div

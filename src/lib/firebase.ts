@@ -160,13 +160,28 @@ export async function registerParticipantDirect(name: string, existingId?: strin
       return null; // DB에 없으면(초기화된 상태) 새 번호를 만들지 않음
     }
 
+    // 이름 유효성 검사 (최소 2글자 이상)
+    const cleanName = name.trim();
+    if (cleanName.length < 2) {
+      throw new Error('이름(닉네임)은 최소 2글자 이상 입력해주세요.');
+    }
+
+    // 중복 닉네임 원자적 검사 (동일 이름 중복 방지)
+    const normalized = cleanName.toLowerCase();
+    const isDuplicate = currentParticipants.some(
+      (p) => p.name.trim().toLowerCase() === normalized
+    );
+    if (isDuplicate) {
+      throw new Error(`'${cleanName}'(은)는 이미 등록된 이름입니다. 다른 이름을 입력해주세요.`);
+    }
+
     // 신규 번호 원자적(Atomic) 채번
     const maxNumber = currentParticipants.reduce((max, p) => Math.max(max, p.number || 0), 0);
     const nextNumber = maxNumber + 1;
     const newParticipant: Participant = {
       id: 'user_' + Math.random().toString(36).substring(2, 9),
       number: nextNumber,
-      name: name.trim(),
+      name: cleanName,
       registeredAt: Date.now(),
       status: 'ACTIVE',
       presenceConfirmed: false,

@@ -30,7 +30,7 @@ export const ParticipantLayoutView: React.FC<ParticipantLayoutViewProps> = ({
       <div className="relative z-10 w-full h-full max-w-[420px] flex flex-col justify-between p-5 pb-6 sm:h-[880px] sm:max-h-[94vh] sm:rounded-[36px] sm:border sm:border-white/10 sm:bg-[#101014]/80 sm:backdrop-blur-3xl sm:shadow-2xl overflow-hidden">
         {header}
 
-        <main className="flex-1 flex flex-col justify-center my-auto py-2">
+        <main className="flex-1 flex flex-col justify-center my-auto py-2 overflow-y-auto">
           {children}
         </main>
 
