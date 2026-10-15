@@ -139,13 +139,27 @@ export async function confirmPresenceDirect(participantId: string): Promise<void
     return p;
   });
 
+  const targetParticipant = (data.participants || []).find((p) => p.id === participantId);
+  const targetNumber = targetParticipant?.number;
+
   let updatedDrawState = { ...data.drawState };
   if (updatedDrawState.currentWinner) {
     updatedDrawState.currentWinner.confirmed = true;
   }
 
+  const updatedPrizes = (data.prizes || []).map((prize) => {
+    if (prize.winner && (prize.winner.number === targetNumber || (updatedDrawState.currentWinner && prize.rank === updatedDrawState.currentWinner.rank))) {
+      return {
+        ...prize,
+        winner: { ...prize.winner, confirmed: true },
+      };
+    }
+    return prize;
+  });
+
   await updateDoc(eventRef, {
     participants: updatedParticipants,
+    prizes: updatedPrizes,
     drawState: updatedDrawState,
     updatedAt: serverTimestamp(),
   });
