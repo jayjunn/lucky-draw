@@ -50,6 +50,18 @@ export interface DrawState {
 
 export type ThemeType = 'HALLOWEEN' | 'MONO' | 'CYBER' | 'GOLD';
 
+export interface EventNoticeConfig {
+  instagramUrl: string;
+  instagramHandle: string;
+  posterImageUrl: string;
+  eventDate: string;
+  location: string;
+  entryFee: string;
+  luckyDrawInfo: string;
+  noticeTitle: string;
+  noticeFullText: string;
+}
+
 export interface AppState {
   participants: Participant[];
   prizes: Prize[];
@@ -57,4 +69,5 @@ export interface AppState {
   eventName: string;
   allowDuplicateWin: boolean;
   theme?: ThemeType;
+  notice?: EventNoticeConfig;
 }

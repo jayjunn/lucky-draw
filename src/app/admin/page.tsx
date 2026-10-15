@@ -6,6 +6,7 @@ import { AdminPinLock } from '@/components/admin/AdminPinLock';
 import { AdminDrawTab } from '@/components/admin/AdminDrawTab';
 import { AdminPrizesTab } from '@/components/admin/AdminPrizesTab';
 import { AdminThemesTab } from '@/components/admin/AdminThemesTab';
+import { AdminNoticeTab } from '@/components/admin/AdminNoticeTab';
 import { 
   Settings, 
   Database, 
@@ -176,6 +177,16 @@ export default function AdminPage() {
           >
             <Palette className="w-3.5 h-3.5" /> 🎨 테마 설정
           </button>
+          <button
+            onClick={() => setActiveTab('notice')}
+            className={`px-4 py-2 text-xs font-bold rounded-t-lg transition flex items-center gap-1.5 ${
+              activeTab === 'notice'
+                ? 'bg-white text-zinc-900 border-t border-x border-zinc-200 -mb-px'
+                : 'text-zinc-500 hover:text-zinc-900'
+            }`}
+          >
+            <span>📢</span> 공지 & 인스타 설정
+          </button>
         </div>
 
         {/* 요약 지표 카드 */}
@@ -251,6 +262,10 @@ export default function AdminPage() {
             setEventNameInput={setEventNameInput}
             onSaveEventName={handleSaveEventName}
           />
+        )}
+
+        {activeTab === 'notice' && (
+          <AdminNoticeTab currentNotice={appState?.notice} />
         )}
       </div>
     </div>

@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useParticipant } from '@/hooks/useParticipant';
 import { useSound } from '@/hooks/useSound';
@@ -12,9 +12,12 @@ import { PassCardView } from '@/components/participant/views/PassCardView';
 import { DrawStatusView } from '@/components/participant/views/DrawStatusView';
 import { WinnerModalView } from '@/components/participant/views/WinnerModalView';
 import { ReactionToastView } from '@/components/participant/views/ReactionToastView';
+import { EventSplashScreen } from '@/components/common/EventSplashScreen';
+import { EventNoticeModal } from '@/components/common/EventNoticeModal';
 
 export default function ParticipantPage() {
   const { isMuted, toggleSound } = useSound();
+  const [isNoticeOpen, setIsNoticeOpen] = useState(false);
   const {
     participant,
     nameInput,
@@ -39,31 +42,50 @@ export default function ParticipantPage() {
     handleShareTicket,
   } = useParticipant();
 
+  const noticeConfig = appState?.notice;
+
   return (
-    <ParticipantLayoutView
-      themeCfg={themeCfg}
-      header={
-        <ParticipantHeaderView
-          themeCfg={themeCfg}
-          timerSeconds={timerSeconds}
-          isMuted={isMuted}
-          onToggleSound={toggleSound}
-        />
-      }
-      overlays={
-        <>
-          <ReactionToastView recentReaction={recentReaction} />
-          <WinnerModalView
-            isOpen={showWinnerSheet}
-            onClose={() => setShowWinnerSheet(false)}
-            participant={participant}
-            currentDraw={currentDraw}
+    <>
+      {/* 파티 포스터 플래시 스플래시 (첫 진입 시 1.2초 노출) */}
+      <EventSplashScreen
+        durationMs={1200}
+        posterSrc={noticeConfig?.posterImageUrl}
+        title={noticeConfig?.noticeTitle}
+        dateText={noticeConfig?.eventDate}
+      />
+
+      {/* 공식 파티 공지사항 모달 */}
+      <EventNoticeModal
+        isOpen={isNoticeOpen}
+        onClose={() => setIsNoticeOpen(false)}
+        notice={noticeConfig}
+      />
+
+      <ParticipantLayoutView
+        themeCfg={themeCfg}
+        header={
+          <ParticipantHeaderView
             themeCfg={themeCfg}
-            onConfirmPresence={handleConfirmPresence}
+            timerSeconds={timerSeconds}
+            isMuted={isMuted}
+            onToggleSound={toggleSound}
+            onOpenNotice={() => setIsNoticeOpen(true)}
           />
-        </>
-      }
-    >
+        }
+        overlays={
+          <>
+            <ReactionToastView recentReaction={recentReaction} />
+            <WinnerModalView
+              isOpen={showWinnerSheet}
+              onClose={() => setShowWinnerSheet(false)}
+              participant={participant}
+              currentDraw={currentDraw}
+              themeCfg={themeCfg}
+              onConfirmPresence={handleConfirmPresence}
+            />
+          </>
+        }
+      >
       <AnimatePresence mode="wait">
         {!participant ? (
           <CheckInView
@@ -88,6 +110,10 @@ export default function ParticipantPage() {
               themeCfg={themeCfg}
               isMeWinner={isMeWinner}
               onShare={handleShareTicket}
+              onOpenNotice={() => setIsNoticeOpen(true)}
+              instagramUrl={noticeConfig?.instagramUrl}
+              location={noticeConfig?.location}
+              eventDate={noticeConfig?.eventDate}
             />
 
             <DrawStatusView
@@ -105,5 +131,6 @@ export default function ParticipantPage() {
         )}
       </AnimatePresence>
     </ParticipantLayoutView>
+    </>
   );
 }

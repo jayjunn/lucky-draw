@@ -14,7 +14,7 @@ import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 
 export function useAdmin() {
   const [appState, setAppState] = useState<AppState | null>(null);
-  const [activeTab, setActiveTab] = useState<'draw' | 'prizes' | 'themes' | 'logs' | 'settings'>('draw');
+  const [activeTab, setActiveTab] = useState<'draw' | 'prizes' | 'themes' | 'notice' | 'logs' | 'settings'>('draw');
   const [isUnlocked, setIsUnlocked] = useState<boolean>(false);
   const [manualNumberInput, setManualNumberInput] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState<string>('');

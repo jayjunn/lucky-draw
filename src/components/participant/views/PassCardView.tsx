@@ -1,7 +1,7 @@
 import React from 'react';
 import { Participant } from '@/types';
 import { ThemeStyleConfig } from '@/hooks/useParticipant';
-import { Trophy, MapPin, Share2 } from 'lucide-react';
+import { Trophy, MapPin, Share2, Instagram, Info, Sparkles } from 'lucide-react';
 
 interface PassCardViewProps {
   participant: Participant;
@@ -12,6 +12,10 @@ interface PassCardViewProps {
     prize: string;
   };
   onShare?: () => void;
+  onOpenNotice?: () => void;
+  instagramUrl?: string;
+  location?: string;
+  eventDate?: string;
 }
 
 export const PassCardView: React.FC<PassCardViewProps> = ({
@@ -20,6 +24,10 @@ export const PassCardView: React.FC<PassCardViewProps> = ({
   themeCfg,
   isMeWinner,
   onShare,
+  onOpenNotice,
+  instagramUrl = 'https://www.instagram.com/yuntaku.seoul',
+  location = '을지로 YUNTAKU 4F',
+  eventDate = '10.30 FRI — 10.31 SAT',
 }) => {
   return (
     <div className="relative rounded-3xl bg-gradient-to-b from-[#181820] to-[#111116] border border-white/[0.12] p-6 shadow-2xl overflow-hidden shadow-[inset_0_1px_1px_rgba(255,255,255,0.15)]">
@@ -94,14 +102,14 @@ export const PassCardView: React.FC<PassCardViewProps> = ({
         <div className="flex-1 text-left space-y-1">
           <p className="text-[11px] font-bold text-white flex items-center gap-1">
             <MapPin className="w-3 h-3 text-zinc-400" />
-            을지로 YUNTAKU 4F
+            {location}
           </p>
           <p className="text-[10px] text-zinc-400 leading-tight">
-            Unlimited Party Drink + 1 Lucky Ticket
+            무제한 데킬라·보드카 + 1 Lucky Ticket
           </p>
           <div className="flex items-center justify-between pt-0.5">
             <span className="text-[9px] font-mono text-zinc-400">
-              2026.10.30 - 10.31
+              {eventDate}
             </span>
             {onShare && (
               <button
@@ -115,6 +123,30 @@ export const PassCardView: React.FC<PassCardViewProps> = ({
             )}
           </div>
         </div>
+      </div>
+
+      {/* 인스타그램 팔로우 & 파티 공지 액션 바 */}
+      <div className="mt-4 pt-3 border-t border-white/[0.08] grid grid-cols-2 gap-2">
+        <a
+          href={instagramUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-gradient-to-r from-[#833ab4]/20 via-[#fd1d1d]/20 to-[#fcb045]/20 border border-white/10 hover:border-pink-500/40 text-[11px] font-bold text-white transition active:scale-95 shadow-sm"
+        >
+          <Instagram className="w-3.5 h-3.5 text-pink-400" />
+          <span>인스타 팔로우</span>
+        </a>
+
+        {onOpenNotice && (
+          <button
+            type="button"
+            onClick={onOpenNotice}
+            className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-[11px] font-bold text-zinc-200 transition active:scale-95"
+          >
+            <Info className="w-3.5 h-3.5 text-orange-400" />
+            <span>파티 공지·혜택</span>
+          </button>
+        )}
       </div>
     </div>
   );
