@@ -36,6 +36,7 @@ export default function ParticipantPage() {
     handleRegister,
     handleConfirmPresence,
     sendReaction,
+    handleShareTicket,
   } = useParticipant();
 
   return (
@@ -86,6 +87,7 @@ export default function ParticipantPage() {
               qrDataUrl={qrDataUrl}
               themeCfg={themeCfg}
               isMeWinner={isMeWinner}
+              onShare={handleShareTicket}
             />
 
             <DrawStatusView

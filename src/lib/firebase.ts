@@ -9,6 +9,7 @@ import {
   addDoc, 
   onSnapshot,
   updateDoc,
+  runTransaction,
   serverTimestamp,
   Unsubscribe
 } from 'firebase/firestore';
@@ -84,84 +85,98 @@ export function subscribeAppState(callback: (state: AppState) => void): Unsubscr
   });
 }
 
-// 2. 참가자 등록 (Client-side Firebase Direct)
+// 2. 참가자 등록 (Client-side Firebase Direct with Atomic Transaction)
 export async function registerParticipantDirect(name: string, existingId?: string): Promise<Participant | null> {
   const firestore = getFirebaseDb();
   const eventRef = doc(firestore, EVENT_DOC_PATH[0], EVENT_DOC_PATH[1]);
-  const snap = await getDoc(eventRef);
 
-  let currentParticipants: Participant[] = [];
-  if (snap.exists()) {
-    const data = snap.data() as AppState;
-    currentParticipants = data.participants || [];
-  }
+  return await runTransaction(firestore, async (transaction) => {
+    const snap = await transaction.get(eventRef);
 
-  // 기존 등록자 재접속 확인 (존재하지 않으면 절대 자동 생성하지 않고 null 반환!)
-  if (existingId) {
-    const found = currentParticipants.find((p) => p.id === existingId);
-    if (found) return found;
-    return null; // DB에 없으면(초기화된 상태) 새 번호를 만들지 않음
-  }
+    let currentParticipants: Participant[] = [];
+    if (snap.exists()) {
+      const data = snap.data() as AppState;
+      currentParticipants = data.participants || [];
+    }
 
-  // 신규 번호 채번 (사용자가 직접 닉네임을 입력하고 버튼을 눌렀을 때만 실행)
-  const maxNumber = currentParticipants.reduce((max, p) => Math.max(max, p.number || 0), 0);
-  const nextNumber = maxNumber + 1;
-  const newParticipant: Participant = {
-    id: 'user_' + Math.random().toString(36).substring(2, 9),
-    number: nextNumber,
-    name: name.trim(),
-    registeredAt: Date.now(),
-    status: 'ACTIVE',
-    presenceConfirmed: false,
-  };
+    // 기존 등록자 재접속 확인 (존재하지 않으면 절대 자동 생성하지 않고 null 반환!)
+    if (existingId) {
+      const found = currentParticipants.find((p) => p.id === existingId);
+      if (found) return found;
+      return null; // DB에 없으면(초기화된 상태) 새 번호를 만들지 않음
+    }
 
-  const updatedParticipants = [...currentParticipants, newParticipant];
-  await updateDoc(eventRef, {
-    participants: updatedParticipants,
-    updatedAt: serverTimestamp(),
+    // 신규 번호 원자적(Atomic) 채번
+    const maxNumber = currentParticipants.reduce((max, p) => Math.max(max, p.number || 0), 0);
+    const nextNumber = maxNumber + 1;
+    const newParticipant: Participant = {
+      id: 'user_' + Math.random().toString(36).substring(2, 9),
+      number: nextNumber,
+      name: name.trim(),
+      registeredAt: Date.now(),
+      status: 'ACTIVE',
+      presenceConfirmed: false,
+    };
+
+    const updatedParticipants = [...currentParticipants, newParticipant];
+    if (!snap.exists()) {
+      transaction.set(eventRef, {
+        ...INITIAL_APP_STATE,
+        participants: updatedParticipants,
+        updatedAt: serverTimestamp(),
+      });
+    } else {
+      transaction.update(eventRef, {
+        participants: updatedParticipants,
+        updatedAt: serverTimestamp(),
+      });
+    }
+
+    return newParticipant;
   });
-
-  return newParticipant;
 }
 
-// 3. 참가자 현장 출석 확인
+// 3. 참가자 현장 출석 확인 (Atomic Transaction)
 export async function confirmPresenceDirect(participantId: string): Promise<void> {
   const firestore = getFirebaseDb();
   const eventRef = doc(firestore, EVENT_DOC_PATH[0], EVENT_DOC_PATH[1]);
-  const snap = await getDoc(eventRef);
-  if (!snap.exists()) return;
 
-  const data = snap.data() as AppState;
-  const updatedParticipants = (data.participants || []).map((p) => {
-    if (p.id === participantId) {
-      return { ...p, presenceConfirmed: true };
+  await runTransaction(firestore, async (transaction) => {
+    const snap = await transaction.get(eventRef);
+    if (!snap.exists()) return;
+
+    const data = snap.data() as AppState;
+    const updatedParticipants = (data.participants || []).map((p) => {
+      if (p.id === participantId) {
+        return { ...p, presenceConfirmed: true };
+      }
+      return p;
+    });
+
+    const targetParticipant = (data.participants || []).find((p) => p.id === participantId);
+    const targetNumber = targetParticipant?.number;
+
+    let updatedDrawState = { ...data.drawState };
+    if (updatedDrawState.currentWinner) {
+      updatedDrawState.currentWinner.confirmed = true;
     }
-    return p;
-  });
 
-  const targetParticipant = (data.participants || []).find((p) => p.id === participantId);
-  const targetNumber = targetParticipant?.number;
+    const updatedPrizes = (data.prizes || []).map((prize) => {
+      if (prize.winner && (prize.winner.number === targetNumber || (updatedDrawState.currentWinner && prize.rank === updatedDrawState.currentWinner.rank))) {
+        return {
+          ...prize,
+          winner: { ...prize.winner, confirmed: true },
+        };
+      }
+      return prize;
+    });
 
-  let updatedDrawState = { ...data.drawState };
-  if (updatedDrawState.currentWinner) {
-    updatedDrawState.currentWinner.confirmed = true;
-  }
-
-  const updatedPrizes = (data.prizes || []).map((prize) => {
-    if (prize.winner && (prize.winner.number === targetNumber || (updatedDrawState.currentWinner && prize.rank === updatedDrawState.currentWinner.rank))) {
-      return {
-        ...prize,
-        winner: { ...prize.winner, confirmed: true },
-      };
-    }
-    return prize;
-  });
-
-  await updateDoc(eventRef, {
-    participants: updatedParticipants,
-    prizes: updatedPrizes,
-    drawState: updatedDrawState,
-    updatedAt: serverTimestamp(),
+    transaction.update(eventRef, {
+      participants: updatedParticipants,
+      prizes: updatedPrizes,
+      drawState: updatedDrawState,
+      updatedAt: serverTimestamp(),
+    });
   });
 }
 
@@ -180,91 +195,98 @@ export async function startRouletteDirect(rank: number): Promise<void> {
   });
 }
 
-// 5. 어드민 당첨자 발표
+// 5. 어드민 당첨자 발표 (Atomic Transaction)
 export async function announceWinnerDirect(rank: number, targetNumber?: number): Promise<void> {
   const firestore = getFirebaseDb();
   const eventRef = doc(firestore, EVENT_DOC_PATH[0], EVENT_DOC_PATH[1]);
-  const snap = await getDoc(eventRef);
-  if (!snap.exists()) return;
 
-  const data = snap.data() as AppState;
-  const prize = data.prizes.find((p) => p.rank === rank);
-  if (!prize) return;
+  let winnerInfo: any = null;
 
-  const wonNumbers = new Set(
-    data.prizes.filter((p) => p.winner && p.rank !== rank).map((p) => p.winner!.number)
-  );
-  const absentNumbers = new Set(
-    data.participants.filter((p) => p.status === 'ABSENT').map((p) => p.number)
-  );
+  await runTransaction(firestore, async (transaction) => {
+    const snap = await transaction.get(eventRef);
+    if (!snap.exists()) return;
 
-  let candidates = data.participants.filter((p) => {
-    if (absentNumbers.has(p.number)) return false;
-    if (!data.allowDuplicateWin && wonNumbers.has(p.number)) return false;
-    return true;
-  });
+    const data = snap.data() as AppState;
+    const prize = data.prizes.find((p) => p.rank === rank);
+    if (!prize) return;
 
-  if (targetNumber) {
-    const specified = candidates.find((p) => p.number === targetNumber);
-    if (specified) candidates = [specified];
-  }
+    const wonNumbers = new Set(
+      data.prizes.filter((p) => p.winner && p.rank !== rank).map((p) => p.winner!.number)
+    );
+    const absentNumbers = new Set(
+      data.participants.filter((p) => p.status === 'ABSENT').map((p) => p.number)
+    );
 
-  if (candidates.length === 0) {
-    throw new Error('추첨 가능한 참가자가 없습니다.');
-  }
+    let candidates = data.participants.filter((p) => {
+      if (absentNumbers.has(p.number)) return false;
+      if (!data.allowDuplicateWin && wonNumbers.has(p.number)) return false;
+      return true;
+    });
 
-  const winner = candidates[Math.floor(Math.random() * candidates.length)];
-  const winnerInfo = {
-    rank,
-    prize: prize.title,
-    winnerNumber: winner.number,
-    winnerName: winner.name,
-    announcedAt: Date.now(),
-    confirmed: false,
-  };
-
-  const updatedPrizes = data.prizes.map((p) => {
-    if (p.rank === rank) {
-      return {
-        ...p,
-        winner: { number: winner.number, name: winner.name, confirmed: false },
-        announced: true,
-      };
+    if (targetNumber) {
+      const specified = candidates.find((p) => p.number === targetNumber);
+      if (specified) candidates = [specified];
     }
-    return p;
-  });
 
-  const updatedParticipants = data.participants.map((p) => {
-    if (p.id === winner.id) {
-      return {
-        ...p,
-        isWinner: { rank, prize: prize.title, announcedAt: Date.now() },
-        presenceConfirmed: false,
-      };
+    if (candidates.length === 0) {
+      throw new Error('추첨 가능한 참가자가 없습니다.');
     }
-    return p;
+
+    const winner = candidates[Math.floor(Math.random() * candidates.length)];
+    winnerInfo = {
+      rank,
+      prize: prize.title,
+      winnerNumber: winner.number,
+      winnerName: winner.name,
+      announcedAt: Date.now(),
+      confirmed: false,
+    };
+
+    const updatedPrizes = data.prizes.map((p) => {
+      if (p.rank === rank) {
+        return {
+          ...p,
+          winner: { number: winner.number, name: winner.name, confirmed: false },
+          announced: true,
+        };
+      }
+      return p;
+    });
+
+    const updatedParticipants = data.participants.map((p) => {
+      if (p.id === winner.id) {
+        return {
+          ...p,
+          isWinner: { rank, prize: prize.title, announcedAt: Date.now() },
+          presenceConfirmed: false,
+        };
+      }
+      return p;
+    });
+
+    transaction.update(eventRef, {
+      prizes: updatedPrizes,
+      participants: updatedParticipants,
+      drawState: {
+        currentRank: rank,
+        phase: 'ANNOUNCED',
+        currentWinner: winnerInfo,
+        callTimer: 30,
+      },
+      updatedAt: serverTimestamp(),
+    });
   });
 
-  await updateDoc(eventRef, {
-    prizes: updatedPrizes,
-    participants: updatedParticipants,
-    drawState: {
-      currentRank: rank,
-      phase: 'ANNOUNCED',
-      currentWinner: winnerInfo,
-      callTimer: 30,
-    },
-    updatedAt: serverTimestamp(),
-  });
-
-  // 당첨 로그 추가
-  await addDoc(collection(firestore, EVENT_DOC_PATH[0], EVENT_DOC_PATH[1], 'draw_logs'), {
-    ...winnerInfo,
-    type: 'WINNER',
-    createdAt: new Date().toISOString(),
-    formattedDate: new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }),
-    timestamp: serverTimestamp(),
-  });
+  // 당첨 로그 추가 (비동기)
+  if (winnerInfo) {
+    await addDoc(collection(firestore, EVENT_DOC_PATH[0], EVENT_DOC_PATH[1], 'draw_logs'), {
+      ...winnerInfo,
+      type: 'WINNER',
+      createdAt: new Date().toISOString(),
+      formattedDate: new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }),
+      timestamp: serverTimestamp(),
+    });
+  }
 }
 
 // 6. 부재자 실격 및 재추첨

@@ -76,8 +76,19 @@ test.describe('럭키드로우 전체 E2E 실시간 시나리오 테스트', () 
     await expect(mobilePage.locator(`text=${testNickName}`)).toBeVisible();
     await expect(mobilePage.locator('img[alt="PASS QR"]')).toBeVisible();
 
-    // --- STEP 2: 어드민 페이지에서 실시간 참가자 확인 ---
+    // --- STEP 2: 어드민 페이지에서 PIN 잠금 해제 및 실시간 참가자 확인 ---
     await adminPage.goto('/admin');
+    
+    // PIN 인증 키패드가 나타나면 7777 입력
+    const pinTitle = adminPage.locator('text=관리자 인증');
+    if (await pinTitle.isVisible({ timeout: 3000 }).catch(() => false)) {
+      const btn7 = adminPage.locator('button:has-text("7")');
+      await btn7.click();
+      await btn7.click();
+      await btn7.click();
+      await btn7.click();
+    }
+
     await expect(adminPage.locator('h1:has-text("MANAGEMENT")')).toBeVisible({ timeout: 10000 });
     await expect(adminPage.locator(`text=${testNickName}`).first()).toBeVisible({ timeout: 10000 });
 

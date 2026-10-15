@@ -1,0 +1,18 @@
+{
+  "name": "YUNTAKU LUCKY DRAW",
+  "short_name": "럭키드로우",
+  "description": "실시간 럭키드로우 디지털 패스 & 추첨 시스템",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#09090b",
+  "theme_color": "#09090b",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

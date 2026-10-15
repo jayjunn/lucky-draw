@@ -1,7 +1,7 @@
 import React from 'react';
 import { Participant } from '@/types';
 import { ThemeStyleConfig } from '@/hooks/useParticipant';
-import { Trophy, MapPin } from 'lucide-react';
+import { Trophy, MapPin, Share2 } from 'lucide-react';
 
 interface PassCardViewProps {
   participant: Participant;
@@ -11,6 +11,7 @@ interface PassCardViewProps {
     rank: number;
     prize: string;
   };
+  onShare?: () => void;
 }
 
 export const PassCardView: React.FC<PassCardViewProps> = ({
@@ -18,6 +19,7 @@ export const PassCardView: React.FC<PassCardViewProps> = ({
   qrDataUrl,
   themeCfg,
   isMeWinner,
+  onShare,
 }) => {
   return (
     <div className="relative rounded-3xl bg-gradient-to-b from-[#181820] to-[#111116] border border-white/[0.12] p-6 shadow-2xl overflow-hidden shadow-[inset_0_1px_1px_rgba(255,255,255,0.15)]">
@@ -97,9 +99,21 @@ export const PassCardView: React.FC<PassCardViewProps> = ({
           <p className="text-[10px] text-zinc-400 leading-tight">
             Unlimited Party Drink + 1 Lucky Ticket
           </p>
-          <p className="text-[9px] font-mono text-zinc-400 pt-0.5">
-            2026.10.30 - 10.31
-          </p>
+          <div className="flex items-center justify-between pt-0.5">
+            <span className="text-[9px] font-mono text-zinc-400">
+              2026.10.30 - 10.31
+            </span>
+            {onShare && (
+              <button
+                type="button"
+                onClick={onShare}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 text-[10px] font-medium text-white transition-all border border-white/10"
+              >
+                <Share2 className="w-2.5 h-2.5" />
+                <span>공유</span>
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>

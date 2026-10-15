@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import QRCode from 'qrcode';
 import confetti from 'canvas-confetti';
 import { soundFX } from '@/lib/sound';
+import { Haptic } from '@/lib/haptic';
 import { AppState, Participant, ThemeType } from '@/types';
 import { 
   subscribeAppState, 
@@ -79,11 +80,7 @@ export function useParticipant() {
       soundFX.playFanfare();
     } catch {}
 
-    if (typeof navigator !== 'undefined' && navigator.vibrate) {
-      try {
-        navigator.vibrate([150, 80, 150, 80, 400]);
-      } catch {}
-    }
+    Haptic.celebrateWinner();
 
     try {
       confetti({
@@ -143,7 +140,8 @@ export function useParticipant() {
           rollingIntervalRef.current = setInterval(() => {
             setRollingNumber(Math.floor(Math.random() * 99) + 1);
             soundFX.playTick();
-          }, 55);
+            Haptic.rouletteTick();
+          }, 60);
         }
       } else {
         if (rollingIntervalRef.current) {
@@ -238,9 +236,11 @@ export function useParticipant() {
         try {
           soundFX.playFanfare();
         } catch {}
+        Haptic.success();
       }
     } catch (err: any) {
       console.error('등록 실패:', err);
+      Haptic.warning();
       alert('입장권 발급 오류: ' + (err?.message || '네트워크 상태를 확인해주세요.'));
     } finally {
       setIsSubmitting(false);
@@ -253,6 +253,7 @@ export function useParticipant() {
     try {
       await confirmPresenceDirect(participant.id);
       soundFX.playFanfare();
+      Haptic.celebrateWinner();
     } catch (err) {
       console.error('출석 확인 실패:', err);
     }
@@ -261,6 +262,7 @@ export function useParticipant() {
   // 실시간 리액션 전송
   const sendReaction = useCallback(async (icon: string) => {
     try {
+      Haptic.lightTap();
       await sendCheerDirect(icon, participant?.name || '참가자');
       setRecentReaction(icon);
       soundFX.playTick();
@@ -269,6 +271,31 @@ export function useParticipant() {
       console.error(err);
     }
   }, [participant?.name]);
+
+  // Web Share API를 활용한 디지털 패스 공유 기능
+  const handleShareTicket = useCallback(async () => {
+    if (!participant) return;
+    Haptic.lightTap();
+
+    const shareData = {
+      title: `${appState?.eventName || '행운의 럭키드로우'} 입장권`,
+      text: `[${participant.name}]님의 행운의 번호는 No.${String(participant.number).padStart(3, '0')} 입니다! 행운을 빕니다 ✨`,
+      url: typeof window !== 'undefined' ? window.location.href : '',
+    };
+
+    if (typeof navigator !== 'undefined' && navigator.share) {
+      try {
+        await navigator.share(shareData);
+      } catch (e) {
+        // 사용자가 취소했거나 미지원
+      }
+    } else if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      try {
+        await navigator.clipboard.writeText(`${shareData.title}\n${shareData.text}\n${shareData.url}`);
+        alert('입장권 번호와 링크가 클립보드에 복사되었습니다!');
+      } catch (e) {}
+    }
+  }, [participant, appState?.eventName]);
 
   const isMeWinner = participant?.isWinner;
   const currentDraw = appState?.drawState;
@@ -298,5 +325,6 @@ export function useParticipant() {
     handleConfirmPresence,
     sendReaction,
     triggerWinnerCelebration,
+    handleShareTicket,
   };
 }

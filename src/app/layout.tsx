@@ -2,8 +2,18 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "YUNTAKU PASS",
+  title: "YUNTAKU PASS - 럭키드로우",
   description: "Official Mobile Admission & Lucky Draw Pass",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "YUNTAKU PASS",
+  },
+  icons: {
+    icon: "/icon.svg",
+    apple: "/icon.svg",
+  },
 };
 
 export const viewport: Viewport = {
