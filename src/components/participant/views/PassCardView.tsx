@@ -1,0 +1,107 @@
+import React from 'react';
+import { Participant } from '@/types';
+import { ThemeStyleConfig } from '@/hooks/useParticipant';
+import { Trophy, MapPin } from 'lucide-react';
+
+interface PassCardViewProps {
+  participant: Participant;
+  qrDataUrl: string;
+  themeCfg: ThemeStyleConfig;
+  isMeWinner?: {
+    rank: number;
+    prize: string;
+  };
+}
+
+export const PassCardView: React.FC<PassCardViewProps> = ({
+  participant,
+  qrDataUrl,
+  themeCfg,
+  isMeWinner,
+}) => {
+  return (
+    <div className="relative rounded-3xl bg-gradient-to-b from-[#181820] to-[#111116] border border-white/[0.12] p-6 shadow-2xl overflow-hidden shadow-[inset_0_1px_1px_rgba(255,255,255,0.15)]">
+      {/* 상단 메타 바 */}
+      <div className="flex items-center justify-between pb-4 border-b border-white/[0.08]">
+        <div className="flex items-center gap-2">
+          <span
+            className="w-2 h-2 rounded-full"
+            style={{ backgroundColor: themeCfg.accent }}
+          />
+          <span className="text-[11px] font-bold tracking-wider text-zinc-300">
+            OFFICIAL PASS
+          </span>
+        </div>
+        <span className="text-[10px] font-mono font-medium text-zinc-400">
+          ID: {participant.id.slice(-6).toUpperCase()}
+        </span>
+      </div>
+
+      {/* 중앙 행운 번호 */}
+      <div className="py-6 text-center">
+        <p className="text-[10px] font-bold tracking-[0.25em] text-zinc-400 uppercase mb-1">
+          LUCKY DRAW NUMBER
+        </p>
+
+        <div className="text-6xl font-black font-mono tracking-tight text-white py-1">
+          #{String(participant.number).padStart(3, '0')}
+        </div>
+
+        <div className="flex items-center justify-center gap-1.5 mt-2">
+          <span className="text-sm font-bold text-zinc-200">
+            {participant.name}
+          </span>
+          <span className="text-[10px] font-medium text-zinc-400 px-1.5 py-0.5 rounded bg-white/5">
+            PLAYER
+          </span>
+        </div>
+
+        {isMeWinner && (
+          <div
+            className="mt-3 inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black text-black shadow-md"
+            style={{ backgroundColor: themeCfg.accent }}
+          >
+            <Trophy className="w-3.5 h-3.5" />
+            <span>{isMeWinner.rank}등 당첨 확정</span>
+          </div>
+        )}
+
+        {participant.status === 'ABSENT' && (
+          <div className="mt-3 inline-block px-3 py-1 rounded-full bg-zinc-800 text-zinc-400 text-xs font-medium border border-zinc-700">
+            현장 부재 (실격 처리됨)
+          </div>
+        )}
+      </div>
+
+      {/* 하단 패스 스펙 (QR코드 + 장소/혜택 안내) */}
+      <div className="pt-4 border-t border-white/[0.08] flex items-center justify-between gap-4">
+        <div className="p-1.5 bg-white rounded-xl shrink-0 shadow-sm">
+          {qrDataUrl ? (
+            <img
+              src={qrDataUrl}
+              alt="PASS QR"
+              className="w-16 h-16 object-contain"
+            />
+          ) : (
+            <div className="w-16 h-16 flex items-center justify-center text-[10px] text-zinc-500 font-mono">
+              QR
+            </div>
+          )}
+        </div>
+
+        <div className="flex-1 text-left space-y-1">
+          <p className="text-[11px] font-bold text-white flex items-center gap-1">
+            <MapPin className="w-3 h-3 text-zinc-400" />
+            을지로 YUNTAKU 4F
+          </p>
+          <p className="text-[10px] text-zinc-400 leading-tight">
+            Unlimited Party Drink + 1 Lucky Ticket
+          </p>
+          <p className="text-[9px] font-mono text-zinc-400 pt-0.5">
+            2026.10.30 - 10.31
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+};

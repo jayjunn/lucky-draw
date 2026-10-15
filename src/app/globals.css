@@ -24,7 +24,13 @@ html, body {
   user-select: none;
   -webkit-user-select: none;
   -webkit-tap-highlight-color: transparent;
-  touch-action: manipulation;
+}
+
+/* iOS 사파리 필수: 인풋 필드 텍스트 선택 및 포커스 허용 */
+input, textarea, select {
+  user-select: text !important;
+  -webkit-user-select: text !important;
+  font-size: 16px !important; /* iOS 자동 줌인 방지 필수 */
 }
 
 /* 럭셔리 모바일 카드 미세 인셋 섀도우 & 하이라이트 */
@@ -37,6 +43,11 @@ html, body {
 }
 
 /* 부드러운 반응형 탭 피드백 */
+button {
+  touch-action: manipulation;
+  cursor: pointer;
+}
+
 button:active {
   transform: scale(0.98);
 }
