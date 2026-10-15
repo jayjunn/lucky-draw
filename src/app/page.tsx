@@ -4,9 +4,14 @@ import React, { useState, useEffect, useRef } from 'react';
 import QRCode from 'qrcode';
 import confetti from 'canvas-confetti';
 import { motion, AnimatePresence } from 'framer-motion';
-import { getSocket } from '@/lib/socket';
 import { soundFX } from '@/lib/sound';
 import { AppState, Participant, ThemeType } from '@/types';
+import { 
+  subscribeAppState, 
+  registerParticipantDirect, 
+  confirmPresenceDirect, 
+  sendCheerDirect 
+} from '@/lib/firebase';
 import { 
   Trophy, 
   Volume2, 
@@ -16,7 +21,6 @@ import {
   Sparkles,
   ArrowRight,
   ShieldCheck,
-  Zap,
   MapPin
 } from 'lucide-react';
 
@@ -73,104 +77,98 @@ export default function ParticipantPage() {
   const [showWinnerSheet, setShowWinnerSheet] = useState(false);
   const [recentReaction, setRecentReaction] = useState<string | null>(null);
   const [timerSeconds, setTimerSeconds] = useState<number | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const rollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const prevPhaseRef = useRef<string>('IDLE');
+  const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
   const activeTheme = appState?.theme || 'HALLOWEEN';
   const themeCfg = THEME_STYLES[activeTheme] || THEME_STYLES.HALLOWEEN;
 
+  // 1. Firebase 실시간 리스너 구독 (Vercel Serverless 100% 호환)
   useEffect(() => {
-    const socket = getSocket();
-
     const savedId = localStorage.getItem('lucky_draw_participant_id');
     const savedName = localStorage.getItem('lucky_draw_participant_name');
 
-    if (savedId) {
-      socket.emit('register_participant', {
-        existingId: savedId,
-        name: savedName || '참가자',
-      });
+    if (savedId && savedName) {
+      registerParticipantDirect(savedName, savedId).then((p) => {
+        setParticipant(p);
+      }).catch(console.error);
     }
 
-    socket.on('state_sync', (state: AppState) => {
+    const unsubscribe = subscribeAppState((state: AppState) => {
       setAppState(state);
+
+      // 내 정보 업데이트
       if (participant) {
         const me = state.participants.find((p) => p.id === participant.id);
         if (me) setParticipant(me);
       }
-    });
 
-    socket.on('participant_registered', (p: Participant) => {
-      setParticipant(p);
-      localStorage.setItem('lucky_draw_participant_id', p.id);
-      localStorage.setItem('lucky_draw_participant_name', p.name);
-      localStorage.setItem('lucky_draw_participant_number', p.number.toString());
-    });
+      // 룰렛 상태 변화 감지
+      const currentPhase = state.drawState?.phase;
+      if (currentPhase !== prevPhaseRef.current) {
+        prevPhaseRef.current = currentPhase || 'IDLE';
 
-    socket.on('draw_roulette_start', () => {
-      soundFX.playDrumRoll(3.5);
-      if (navigator.vibrate) navigator.vibrate([80, 40, 80, 40, 100]);
+        if (currentPhase === 'ROULETTE') {
+          soundFX.playDrumRoll(3.5);
+          if (navigator.vibrate) navigator.vibrate([80, 40, 80, 40, 100]);
 
-      if (rollingIntervalRef.current) clearInterval(rollingIntervalRef.current);
-      rollingIntervalRef.current = setInterval(() => {
-        setRollingNumber(Math.floor(Math.random() * 99) + 1);
-        soundFX.playTick();
-      }, 55);
-    });
+          if (rollingIntervalRef.current) clearInterval(rollingIntervalRef.current);
+          rollingIntervalRef.current = setInterval(() => {
+            setRollingNumber(Math.floor(Math.random() * 99) + 1);
+            soundFX.playTick();
+          }, 55);
+        } else if (currentPhase === 'ANNOUNCED') {
+          if (rollingIntervalRef.current) {
+            clearInterval(rollingIntervalRef.current);
+            rollingIntervalRef.current = null;
+          }
 
-    socket.on('draw_announced', (winner: { rank: number; prize: string; winnerNumber: number; winnerName: string }) => {
-      if (rollingIntervalRef.current) {
-        clearInterval(rollingIntervalRef.current);
-        rollingIntervalRef.current = null;
+          const mySavedNumber = localStorage.getItem('lucky_draw_participant_number');
+          const currentNumber = participant?.number || (mySavedNumber ? parseInt(mySavedNumber, 10) : null);
+          const winnerNum = state.drawState?.currentWinner?.winnerNumber;
+
+          if (currentNumber !== null && currentNumber === winnerNum) {
+            triggerWinnerCelebration();
+          } else {
+            soundFX.playCheer();
+          }
+
+          // 호명 카운트다운 타이머 시작
+          setTimerSeconds(30);
+          if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+          timerIntervalRef.current = setInterval(() => {
+            setTimerSeconds((prev) => {
+              if (prev === null || prev <= 1) {
+                if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+                return null;
+              }
+              if (prev <= 6) soundFX.playTick();
+              return prev - 1;
+            });
+          }, 1000);
+        } else if (currentPhase === 'IDLE') {
+          if (rollingIntervalRef.current) {
+            clearInterval(rollingIntervalRef.current);
+            rollingIntervalRef.current = null;
+          }
+          if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+          setTimerSeconds(null);
+          setShowWinnerSheet(false);
+        }
       }
-
-      const mySavedNumber = localStorage.getItem('lucky_draw_participant_number');
-      const currentNumber = participant?.number || (mySavedNumber ? parseInt(mySavedNumber, 10) : null);
-
-      if (currentNumber !== null && currentNumber === winner.winnerNumber) {
-        triggerWinnerCelebration();
-      } else {
-        soundFX.playCheer();
-      }
-    });
-
-    socket.on('draw_winner_cancelled', (data: { cancelledNumber: number; cancelledName: string }) => {
-      const mySavedNumber = localStorage.getItem('lucky_draw_participant_number');
-      const currentNumber = participant?.number || (mySavedNumber ? parseInt(mySavedNumber, 10) : null);
-
-      if (currentNumber === data.cancelledNumber) {
-        setShowWinnerSheet(false);
-      }
-    });
-
-    socket.on('call_timer_tick', (data: { seconds: number }) => {
-      setTimerSeconds(data.seconds);
-      if (data.seconds <= 5 && data.seconds > 0) {
-        soundFX.playTick();
-      }
-    });
-
-    socket.on('call_timer_ended', () => {
-      setTimerSeconds(null);
-    });
-
-    socket.on('draw_reset', () => {
-      setShowWinnerSheet(false);
-      setTimerSeconds(null);
     });
 
     return () => {
-      socket.off('state_sync');
-      socket.off('participant_registered');
-      socket.off('draw_roulette_start');
-      socket.off('draw_announced');
-      socket.off('draw_winner_cancelled');
-      socket.off('call_timer_tick');
-      socket.off('call_timer_ended');
-      socket.off('draw_reset');
+      unsubscribe();
       if (rollingIntervalRef.current) clearInterval(rollingIntervalRef.current);
+      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
     };
   }, [participant?.id, participant?.number]);
 
+  // QR 코드 생성
   useEffect(() => {
     if (participant) {
       const qrPayload = JSON.stringify({
@@ -205,32 +203,48 @@ export default function ParticipantPage() {
     });
   };
 
-  const handleRegister = (e: React.FormEvent) => {
+  // 참가자 등록 핸들러 (Firebase 실시간 직통)
+  const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!nameInput.trim()) return;
+    if (!nameInput.trim() || isSubmitting) return;
 
-    const socket = getSocket();
-    socket.emit('register_participant', {
-      name: nameInput.trim(),
-    });
+    try {
+      setIsSubmitting(true);
+      const newPart = await registerParticipantDirect(nameInput.trim());
+      setParticipant(newPart);
+      localStorage.setItem('lucky_draw_participant_id', newPart.id);
+      localStorage.setItem('lucky_draw_participant_name', newPart.name);
+      localStorage.setItem('lucky_draw_participant_number', newPart.number.toString());
+      soundFX.playFanfare();
+    } catch (err: any) {
+      console.error('등록 실패:', err);
+      alert('입장권 발급 중 오류가 발생했습니다. 다시 시도해주세요.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const handleConfirmPresence = () => {
+  // 당첨자 출석 확인 핸들러
+  const handleConfirmPresence = async () => {
     if (!participant) return;
-    const socket = getSocket();
-    socket.emit('participant_confirm_presence', { id: participant.id });
-    soundFX.playFanfare();
+    try {
+      await confirmPresenceDirect(participant.id);
+      soundFX.playFanfare();
+    } catch (err) {
+      console.error('출석 확인 실패:', err);
+    }
   };
 
-  const sendReaction = (icon: string) => {
-    const socket = getSocket();
-    socket.emit('participant_cheer', {
-      emoji: icon,
-      name: participant?.name || '참가자',
-    });
-    setRecentReaction(icon);
-    soundFX.playTick();
-    setTimeout(() => setRecentReaction(null), 1400);
+  // 실시간 리액션 전송
+  const sendReaction = async (icon: string) => {
+    try {
+      await sendCheerDirect(icon, participant?.name || '참가자');
+      setRecentReaction(icon);
+      soundFX.playTick();
+      setTimeout(() => setRecentReaction(null), 1400);
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   const toggleSound = () => {
@@ -246,7 +260,7 @@ export default function ParticipantPage() {
 
   return (
     <div className="fixed inset-0 w-full h-[100dvh] bg-[#0A0A0C] text-white flex flex-col justify-center items-center overflow-hidden p-0 sm:p-4 select-none">
-      {/* 백그라운드 앰비언트 글로우 (과하지 않고 은은하게) */}
+      {/* 백그라운드 앰비언트 글로우 */}
       <div 
         className="pointer-events-none fixed inset-0 z-0 opacity-40 transition-all duration-1000"
         style={{
@@ -323,23 +337,25 @@ export default function ParticipantPage() {
                       placeholder="이름 또는 닉네임"
                       maxLength={12}
                       required
-                      className="w-full px-4 py-3.5 rounded-2xl bg-white/[0.04] border border-white/10 text-white font-medium text-sm placeholder-zinc-500 focus:outline-none focus:border-white/30 focus:bg-white/[0.07] transition-all"
+                      disabled={isSubmitting}
+                      className="w-full px-4 py-3.5 rounded-2xl bg-white/[0.04] border border-white/10 text-white font-medium text-sm placeholder-zinc-500 focus:outline-none focus:border-white/30 focus:bg-white/[0.07] transition-all disabled:opacity-50"
                     />
                   </div>
 
                   <button
                     type="submit"
-                    className="w-full py-4 rounded-2xl text-black font-extrabold text-sm tracking-wide shadow-lg active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                    disabled={isSubmitting}
+                    className="w-full py-4 rounded-2xl text-black font-extrabold text-sm tracking-wide shadow-lg active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-60"
                     style={{ backgroundColor: themeCfg.accent }}
                   >
-                    입장 패스 받기 <ArrowRight className="w-4 h-4" />
+                    {isSubmitting ? '발급 중...' : '입장 패스 받기'} <ArrowRight className="w-4 h-4" />
                   </button>
                 </form>
 
                 <div className="pt-3 border-t border-white/[0.06] flex items-center justify-between text-[11px] text-zinc-400">
                   <span>현재 등록된 참가자</span>
                   <span className="text-white font-bold font-mono">
-                    {appState?.participants.length || 0} PLAYERS
+                    {appState?.participants?.length || 0} PLAYERS
                   </span>
                 </div>
               </motion.div>
@@ -368,7 +384,7 @@ export default function ParticipantPage() {
                     </span>
                   </div>
 
-                  {/* 중앙 행운 번호 (시크하고 볼드한 타이포그래피) */}
+                  {/* 중앙 행운 번호 */}
                   <div className="py-6 text-center">
                     <p className="text-[10px] font-bold tracking-[0.25em] text-zinc-400 uppercase mb-1">
                       LUCKY DRAW NUMBER
@@ -478,7 +494,7 @@ export default function ParticipantPage() {
                           상품: {currentDraw?.currentWinner?.prize}
                         </p>
 
-                        {/* 리액션 버튼 (미니멀하고 세련되게) */}
+                        {/* 리액션 버튼 */}
                         <div className="pt-2 flex justify-center gap-2">
                           <button
                             onClick={() => sendReaction('👏')}
@@ -541,7 +557,7 @@ export default function ParticipantPage() {
           )}
         </AnimatePresence>
 
-        {/* 당첨자 전용 세련된 바텀 시트 (Apple Modal 스타일) */}
+        {/* 당첨자 전용 세련된 바텀 시트 */}
         <AnimatePresence>
           {showWinnerSheet && (
             <motion.div

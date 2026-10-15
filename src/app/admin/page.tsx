@@ -3,7 +3,17 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getSocket } from '@/lib/socket';
-import { AppState, Prize } from '@/types';
+import { AppState, Prize, ThemeType } from '@/types';
+import { 
+  subscribeAppState, 
+  startRouletteDirect, 
+  announceWinnerDirect, 
+  redrawAbsentDirect, 
+  setThemeDirect, 
+  resetAllDirect,
+  getFirebaseDb 
+} from '@/lib/firebase';
+import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { 
   Users, 
   Trophy, 
@@ -26,7 +36,6 @@ import {
   Save,
   Palette
 } from 'lucide-react';
-import { ThemeType } from '@/types';
 
 export default function AdminPage() {
   const [appState, setAppState] = useState<AppState | null>(null);
@@ -44,6 +53,12 @@ export default function AdminPage() {
   useEffect(() => {
     const socket = getSocket();
 
+    // Firebase 실시간 리스너 구독 (Vercel Serverless 완벽 호환)
+    const unsubFirebase = subscribeAppState((state: AppState) => {
+      setAppState(state);
+      if (!eventNameInput) setEventNameInput(state.eventName);
+    });
+
     socket.on('state_sync', (state: AppState) => {
       setAppState(state);
       if (!eventNameInput) setEventNameInput(state.eventName);
@@ -54,25 +69,41 @@ export default function AdminPage() {
     });
 
     return () => {
+      unsubFirebase();
       socket.off('state_sync');
       socket.off('admin_alert');
     };
   }, [eventNameInput]);
 
-  const handleStartDraw = (rank: number) => {
+  const handleStartDraw = async (rank: number) => {
+    try {
+      await startRouletteDirect(rank);
+    } catch (e) {
+      console.warn(e);
+    }
     const socket = getSocket();
     socket.emit('admin_start_draw', { rank });
   };
 
-  const handleAnnounceWinner = (rank: number) => {
-    const socket = getSocket();
+  const handleAnnounceWinner = async (rank: number) => {
     const targetNumber = manualNumberInput ? parseInt(manualNumberInput, 10) : undefined;
+    try {
+      await announceWinnerDirect(rank, targetNumber);
+    } catch (e: any) {
+      alert(e.message || '추첨 에러가 발생했습니다.');
+    }
+    const socket = getSocket();
     socket.emit('admin_announce_winner', { rank, targetNumber });
     setManualNumberInput('');
   };
 
-  const handleRedrawAbsent = (rank: number) => {
+  const handleRedrawAbsent = async (rank: number) => {
     if (!confirm('현재 당첨자가 자리에 없습니까? 부재(No-Show)로 실격 처리하고 즉시 다음 참가자를 뽑습니다.')) return;
+    try {
+      await redrawAbsentDirect(rank);
+    } catch (e) {
+      console.warn(e);
+    }
     const socket = getSocket();
     socket.emit('admin_redraw_absent', { rank });
   };
@@ -87,19 +118,40 @@ export default function AdminPage() {
     socket.emit('admin_generate_dummies', { count });
   };
 
-  const handleResetDraws = () => {
+  const handleResetDraws = async () => {
     if (!confirm('현재까지의 당첨 내역을 모두 초기화하고 다시 추첨하시겠습니까? (참가자 목록은 유지됩니다)')) return;
+    try {
+      const firestore = getFirebaseDb();
+      const eventRef = doc(firestore, 'lucky_draw_events', 'current_event');
+      if (appState) {
+        const resetPrizes = appState.prizes.map((p) => ({ ...p, winner: null, announced: false, absentHistory: [] }));
+        const resetParticipants = appState.participants.map((p) => ({ ...p, isWinner: undefined, presenceConfirmed: false }));
+        await updateDoc(eventRef, {
+          prizes: resetPrizes,
+          participants: resetParticipants,
+          drawState: { currentRank: null, phase: 'IDLE', currentWinner: null, callTimer: null },
+          updatedAt: serverTimestamp(),
+        });
+      }
+    } catch (e) {
+      console.warn(e);
+    }
     const socket = getSocket();
     socket.emit('admin_reset_draws');
   };
 
-  const handleResetAll = () => {
+  const handleResetAll = async () => {
     if (!confirm('⚠️ 모든 참가자 및 당첨 내역이 완전히 삭제됩니다. 초기화하시겠습니까?')) return;
+    try {
+      await resetAllDirect();
+    } catch (e) {
+      console.warn(e);
+    }
     const socket = getSocket();
     socket.emit('admin_reset_all');
   };
 
-  const handleAddPrize = (e: React.FormEvent) => {
+  const handleAddPrize = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newPrizeTitle.trim() || !appState) return;
 
@@ -116,20 +168,41 @@ export default function AdminPage() {
       },
     ];
 
+    try {
+      const firestore = getFirebaseDb();
+      await updateDoc(doc(firestore, 'lucky_draw_events', 'current_event'), {
+        prizes: updatedPrizes,
+        updatedAt: serverTimestamp(),
+      });
+    } catch (e) {
+      console.warn(e);
+    }
+
     const socket = getSocket();
     socket.emit('admin_update_prizes', updatedPrizes);
     setNewPrizeTitle('');
     setNewPrizeRank(updatedPrizes.length + 1);
   };
 
-  const handleDeletePrize = (id: string) => {
+  const handleDeletePrize = async (id: string) => {
     if (!appState || !confirm('이 상품을 삭제하시겠습니까?')) return;
     const updatedPrizes = appState.prizes.filter((p) => p.id !== id);
+
+    try {
+      const firestore = getFirebaseDb();
+      await updateDoc(doc(firestore, 'lucky_draw_events', 'current_event'), {
+        prizes: updatedPrizes,
+        updatedAt: serverTimestamp(),
+      });
+    } catch (e) {
+      console.warn(e);
+    }
+
     const socket = getSocket();
     socket.emit('admin_update_prizes', updatedPrizes);
   };
 
-  const handleSaveEditPrize = (id: string) => {
+  const handleSaveEditPrize = async (id: string) => {
     if (!appState) return;
     const updatedPrizes = appState.prizes.map((p) => {
       if (p.id === id) {
@@ -141,20 +214,47 @@ export default function AdminPage() {
       }
       return p;
     });
+
+    try {
+      const firestore = getFirebaseDb();
+      await updateDoc(doc(firestore, 'lucky_draw_events', 'current_event'), {
+        prizes: updatedPrizes,
+        updatedAt: serverTimestamp(),
+      });
+    } catch (e) {
+      console.warn(e);
+    }
+
     const socket = getSocket();
     socket.emit('admin_update_prizes', updatedPrizes);
     setEditingPrizeId(null);
   };
 
-  const handleSaveEventName = (e: React.FormEvent) => {
+  const handleSaveEventName = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!eventNameInput.trim()) return;
+
+    try {
+      const firestore = getFirebaseDb();
+      await updateDoc(doc(firestore, 'lucky_draw_events', 'current_event'), {
+        eventName: eventNameInput.trim(),
+        updatedAt: serverTimestamp(),
+      });
+    } catch (e) {
+      console.warn(e);
+    }
+
     const socket = getSocket();
     socket.emit('admin_update_event_name', { eventName: eventNameInput.trim() });
     alert('행사명이 저장되었습니다.');
   };
 
-  const handleSelectTheme = (selectedTheme: ThemeType) => {
+  const handleSelectTheme = async (selectedTheme: ThemeType) => {
+    try {
+      await setThemeDirect(selectedTheme);
+    } catch (e) {
+      console.warn(e);
+    }
     const socket = getSocket();
     socket.emit('admin_set_theme', { theme: selectedTheme });
     if (selectedTheme === 'HALLOWEEN') {

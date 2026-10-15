@@ -7,6 +7,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { getSocket } from '@/lib/socket';
 import { soundFX } from '@/lib/sound';
 import { AppState, ThemeType } from '@/types';
+import { subscribeAppState, getFirebaseDb } from '@/lib/firebase';
+import { collection, onSnapshot, query, orderBy, limit } from 'firebase/firestore';
 import { 
   Trophy, 
   Users, 
@@ -59,6 +61,25 @@ export default function DisplayPage() {
         },
       }).then(setQrUrl);
     }
+
+    // Firebase 실시간 동기화 (Vercel Serverless 완벽 호환)
+    const unsubFirebase = subscribeAppState((state: AppState) => {
+      setAppState(state);
+      if (state.drawState?.phase === 'ROULETTE') {
+        if (!rollingIntervalRef.current) {
+          soundFX.playDrumRoll(4);
+          rollingIntervalRef.current = setInterval(() => {
+            setRollingNumber(Math.floor(Math.random() * 99) + 1);
+            soundFX.playTick();
+          }, 55);
+        }
+      } else if (state.drawState?.phase === 'ANNOUNCED') {
+        if (rollingIntervalRef.current) {
+          clearInterval(rollingIntervalRef.current);
+          rollingIntervalRef.current = null;
+        }
+      }
+    });
 
     socket.on('state_sync', (state: AppState) => {
       setAppState(state);
@@ -135,6 +156,7 @@ export default function DisplayPage() {
     });
 
     return () => {
+      unsubFirebase();
       socket.off('state_sync');
       socket.off('draw_roulette_start');
       socket.off('draw_announced');
