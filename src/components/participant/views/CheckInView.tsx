@@ -2,13 +2,14 @@
 
 import React, { useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowRight, Clock, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { ArrowRight, Clock, AlertCircle, CheckCircle2, Ticket } from 'lucide-react';
 import { ThemeStyleConfig } from '@/hooks/useParticipant';
 
 interface CheckInViewProps {
   nameInput: string;
   onChangeName: (value: string) => void;
   onSubmit: (e?: React.FormEvent | React.MouseEvent) => void;
+  onRecoverParticipant?: (name: string) => void;
   isSubmitting: boolean;
   participantCount: number;
   themeCfg: ThemeStyleConfig;
@@ -19,6 +20,7 @@ export const CheckInView: React.FC<CheckInViewProps> = ({
   nameInput,
   onChangeName,
   onSubmit,
+  onRecoverParticipant,
   isSubmitting,
   participantCount,
   themeCfg,
@@ -39,8 +41,8 @@ export const CheckInView: React.FC<CheckInViewProps> = ({
     );
     if (isDup) {
       return {
-        type: 'error' as const,
-        message: '이미 등록된 이름입니다. 다른 이름을 사용해주세요.',
+        type: 'duplicate' as const,
+        message: `'${cleanName}'님은 이미 등록되어 있습니다. 본인이 맞으신가요?`,
       };
     }
     return {
@@ -49,7 +51,17 @@ export const CheckInView: React.FC<CheckInViewProps> = ({
     };
   }, [cleanName, existingNames]);
 
-  const isButtonDisabled = isSubmitting || cleanName.length < 2 || validationState?.type === 'error';
+  const isDuplicate = validationState?.type === 'duplicate';
+  const isButtonDisabled = isSubmitting || cleanName.length < 2;
+
+  const handleSubmitOrRecover = (e?: React.FormEvent | React.MouseEvent) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (isDuplicate && onRecoverParticipant) {
+      onRecoverParticipant(cleanName);
+    } else {
+      onSubmit(e);
+    }
+  };
 
   return (
     <motion.div
@@ -72,7 +84,7 @@ export const CheckInView: React.FC<CheckInViewProps> = ({
         </p>
       </div>
 
-      <form onSubmit={onSubmit} className="space-y-4 text-left">
+      <form onSubmit={handleSubmitOrRecover} className="space-y-4 text-left">
         <div className="space-y-1.5">
           <label className="text-[10px] font-bold text-zinc-400 tracking-widest uppercase">
             Participant Name (2글자 이상)
@@ -89,8 +101,8 @@ export const CheckInView: React.FC<CheckInViewProps> = ({
             enterKeyHint="done"
             disabled={isSubmitting}
             className={`w-full px-4 py-3.5 rounded-2xl bg-white/[0.06] border text-white font-semibold text-base placeholder-zinc-500 focus:outline-none transition-all disabled:opacity-50 ${
-              validationState?.type === 'error'
-                ? 'border-rose-500/70 focus:border-rose-500 bg-rose-500/5'
+              isDuplicate
+                ? 'border-amber-500/70 focus:border-amber-400 bg-amber-500/5'
                 : validationState?.type === 'success'
                 ? 'border-emerald-500/70 focus:border-emerald-500'
                 : 'border-white/15 focus:border-white/40 focus:bg-white/[0.1]'
@@ -99,12 +111,27 @@ export const CheckInView: React.FC<CheckInViewProps> = ({
 
           {/* 실시간 유효성 피드백 안내 메시지 */}
           {validationState && (
-            <div className="pt-1 flex items-center gap-1.5 text-xs">
-              {validationState.type === 'error' && (
-                <span className="text-rose-400 flex items-center gap-1 font-medium">
-                  <AlertCircle className="w-3.5 h-3.5" />
-                  {validationState.message}
-                </span>
+            <div className="pt-1 text-xs">
+              {validationState.type === 'duplicate' && (
+                <div className="space-y-1.5 p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20">
+                  <div className="text-amber-300 flex items-center gap-1.5 font-medium">
+                    <Ticket className="w-3.5 h-3.5 flex-shrink-0 text-amber-400" />
+                    <span>{validationState.message}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => onRecoverParticipant ? onRecoverParticipant(cleanName) : onSubmit()}
+                      className="px-2.5 py-1 rounded-lg bg-amber-400 hover:bg-amber-300 active:scale-95 text-black font-extrabold text-[11px] flex items-center gap-1 transition shadow-sm cursor-pointer"
+                    >
+                      <span>내 입장 패스 불러오기</span>
+                      <ArrowRight className="w-3 h-3" />
+                    </button>
+                    <span className="text-[10px] text-zinc-400">
+                      (다른 분이면 다른 닉네임 입력)
+                    </span>
+                  </div>
+                </div>
               )}
               {validationState.type === 'warning' && (
                 <span className="text-amber-400 flex items-center gap-1 font-medium">
@@ -124,17 +151,27 @@ export const CheckInView: React.FC<CheckInViewProps> = ({
 
         <button
           type="submit"
-          onClick={(e) => onSubmit(e)}
+          onClick={handleSubmitOrRecover}
           disabled={isButtonDisabled}
-          className="w-full py-4 rounded-2xl text-black font-extrabold text-sm tracking-wide shadow-lg active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-          style={{ backgroundColor: themeCfg.accent }}
+          className={`w-full py-4 rounded-2xl font-extrabold text-sm tracking-wide shadow-lg active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer ${
+            isDuplicate 
+              ? 'bg-amber-400 hover:bg-amber-300 text-black' 
+              : 'text-black'
+          }`}
+          style={!isDuplicate ? { backgroundColor: themeCfg.accent } : undefined}
         >
           {isSubmitting ? (
             <span className="flex items-center gap-2">
               <Clock className="w-4 h-4 animate-spin text-black" /> 패스 발급 중...
             </span>
+          ) : isDuplicate ? (
+            <>
+              <Ticket className="w-4 h-4" /> 내 입장 패스 불러오기 <ArrowRight className="w-4 h-4" />
+            </>
           ) : (
-            <>입장 패스 받기 <ArrowRight className="w-4 h-4" /></>
+            <>
+              입장 패스 받기 <ArrowRight className="w-4 h-4" />
+            </>
           )}
         </button>
       </form>

@@ -71,7 +71,7 @@ export default function AdminPage() {
   };
 
   return (
-    <div className="min-h-screen w-full bg-[#F4F4F5] text-zinc-900 p-5 lg:p-8 font-mono overflow-y-auto">
+    <div className="min-h-screen w-full bg-[#F4F4F5] text-zinc-900 p-5 lg:p-8 font-mono pb-28">
       <div className="max-w-6xl mx-auto space-y-5">
         {/* 상단 관리자 헤더 */}
         <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-zinc-200">

@@ -37,6 +37,7 @@ export default function ParticipantPage() {
     isAnnounced,
     amIThisRoundWinner,
     handleRegister,
+    handleRecoverParticipant,
     handleConfirmPresence,
     sendReaction,
     handleShareTicket,
@@ -92,6 +93,7 @@ export default function ParticipantPage() {
             nameInput={nameInput}
             onChangeName={setNameInput}
             onSubmit={handleRegister}
+            onRecoverParticipant={handleRecoverParticipant}
             isSubmitting={isSubmitting}
             participantCount={appState?.participants?.length || 0}
             themeCfg={themeCfg}

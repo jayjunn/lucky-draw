@@ -166,13 +166,13 @@ export async function registerParticipantDirect(name: string, existingId?: strin
       throw new Error('이름(닉네임)은 최소 2글자 이상 입력해주세요.');
     }
 
-    // 중복 닉네임 원자적 검사 (동일 이름 중복 방지)
+    // 중복 닉네임 원자적 검사 (동일 이름 중복 시 새 번호를 발급하지 않고 기존 등록자 정보 반환)
     const normalized = cleanName.toLowerCase();
-    const isDuplicate = currentParticipants.some(
+    const existingParticipant = currentParticipants.find(
       (p) => p.name.trim().toLowerCase() === normalized
     );
-    if (isDuplicate) {
-      throw new Error(`'${cleanName}'(은)는 이미 등록된 이름입니다. 다른 이름을 입력해주세요.`);
+    if (existingParticipant) {
+      return existingParticipant;
     }
 
     // 신규 번호 원자적(Atomic) 채번

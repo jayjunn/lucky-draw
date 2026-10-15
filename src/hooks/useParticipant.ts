@@ -216,6 +216,36 @@ export function useParticipant() {
     }
   }, [participant]);
 
+  // 기존 참가자 패스 즉시 복구 핸들러
+  const handleRecoverParticipant = useCallback((targetName: string) => {
+    const clean = targetName.trim().toLowerCase();
+    if (!clean) return false;
+
+    const existing = (appState?.participants || []).find(
+      (p) => p.name.trim().toLowerCase() === clean
+    );
+
+    if (existing) {
+      setParticipant(existing);
+      participantRef.current = existing;
+
+      try {
+        localStorage.setItem('lucky_draw_participant_id', existing.id);
+        localStorage.setItem('lucky_draw_participant_name', existing.name);
+        localStorage.setItem('lucky_draw_participant_number', existing.number.toString());
+      } catch (storageErr) {
+        console.warn('LocalStorage 저장 제한:', storageErr);
+      }
+
+      try {
+        soundFX.playFanfare();
+      } catch {}
+      Haptic.success();
+      return true;
+    }
+    return false;
+  }, [appState?.participants]);
+
   // 참가자 등록 핸들러
   const handleRegister = useCallback(async (e?: React.FormEvent | React.MouseEvent) => {
     if (e && e.preventDefault) e.preventDefault();
@@ -228,13 +258,12 @@ export function useParticipant() {
       return;
     }
 
-    // 클라이언트 사전 중복 검사
-    const isDup = (appState?.participants || []).some(
+    // 클라이언트 사전 중복 검사: 이미 등록된 이름인 경우 즉시 본인 패스를 복구
+    const existing = (appState?.participants || []).find(
       (p) => p.name.trim().toLowerCase() === clean.toLowerCase()
     );
-    if (isDup) {
-      Haptic.warning();
-      alert(`'${clean}'(은)는 이미 등록된 이름입니다. 다른 이름을 입력해주세요.`);
+    if (existing) {
+      handleRecoverParticipant(clean);
       return;
     }
 
@@ -243,6 +272,7 @@ export function useParticipant() {
       const newPart = await registerParticipantDirect(clean);
       if (newPart) {
         setParticipant(newPart);
+        participantRef.current = newPart;
 
         try {
           localStorage.setItem('lucky_draw_participant_id', newPart.id);
@@ -259,12 +289,19 @@ export function useParticipant() {
       }
     } catch (err: any) {
       console.error('등록 실패:', err);
+      const retryExisting = (appState?.participants || []).find(
+        (p) => p.name.trim().toLowerCase() === clean.toLowerCase()
+      );
+      if (retryExisting) {
+        handleRecoverParticipant(clean);
+        return;
+      }
       Haptic.warning();
       alert('입장권 발급 오류: ' + (err?.message || '네트워크 상태를 확인해주세요.'));
     } finally {
       setIsSubmitting(false);
     }
-  }, [nameInput, isSubmitting, appState?.participants]);
+  }, [nameInput, isSubmitting, appState?.participants, handleRecoverParticipant]);
 
   // 당첨자 출석 확인 핸들러
   const handleConfirmPresence = useCallback(async () => {
@@ -341,6 +378,7 @@ export function useParticipant() {
     isAnnounced,
     amIThisRoundWinner,
     handleRegister,
+    handleRecoverParticipant,
     handleConfirmPresence,
     sendReaction,
     triggerWinnerCelebration,
