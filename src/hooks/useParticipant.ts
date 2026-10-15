@@ -67,6 +67,7 @@ export function useParticipant() {
 
   const rollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const prevPhaseRef = useRef<string>('IDLE');
+  const prevWinnerTimeRef = useRef<number>(0);
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const activeTheme: ThemeType = appState?.theme || 'HALLOWEEN';
@@ -102,10 +103,17 @@ export function useParticipant() {
       setAppState(state);
 
       // 1. 이미 등록된 참가자라면 세션 동기화
+      let currentMe: Participant | null = null;
       if (savedId) {
         const found = state.participants.find((p) => p.id === savedId);
         if (found) {
+          currentMe = found;
           setParticipant(found);
+
+          // 내가 당첨자인데 아직 출석 확인을 안 했다면 바로 당첨 화면 띄우기!
+          if (found.isWinner && !found.presenceConfirmed) {
+            setShowWinnerSheet(true);
+          }
         } else {
           // 어드민이 초기화하여 현재 명단에 없으면 이전 세션 클리어 -> 체크인 화면 노출
           setParticipant(null);
@@ -120,37 +128,45 @@ export function useParticipant() {
       }
 
       const currentPhase = state.drawState?.phase;
-      if (currentPhase !== prevPhaseRef.current) {
-        prevPhaseRef.current = currentPhase || 'IDLE';
+      const currentWinner = state.drawState?.currentWinner;
+      const winnerTime = currentWinner?.announcedAt || 0;
 
-        if (currentPhase === 'ROULETTE') {
+      // 룰렛 롤링 상태 처리
+      if (currentPhase === 'ROULETTE') {
+        if (prevPhaseRef.current !== 'ROULETTE') {
           soundFX.playDrumRoll(3.5);
           if (typeof navigator !== 'undefined' && navigator.vibrate) {
             navigator.vibrate([80, 40, 80, 40, 100]);
           }
-
-          if (rollingIntervalRef.current) clearInterval(rollingIntervalRef.current);
+        }
+        if (!rollingIntervalRef.current) {
           rollingIntervalRef.current = setInterval(() => {
             setRollingNumber(Math.floor(Math.random() * 99) + 1);
             soundFX.playTick();
           }, 55);
-        } else if (currentPhase === 'ANNOUNCED') {
-          if (rollingIntervalRef.current) {
-            clearInterval(rollingIntervalRef.current);
-            rollingIntervalRef.current = null;
-          }
+        }
+      } else {
+        if (rollingIntervalRef.current) {
+          clearInterval(rollingIntervalRef.current);
+          rollingIntervalRef.current = null;
+        }
+      }
 
-          const mySavedNumber = localStorage.getItem('lucky_draw_participant_number');
-          const currentNumber = participant?.number || (mySavedNumber ? parseInt(mySavedNumber, 10) : null);
-          const winnerNum = state.drawState?.currentWinner?.winnerNumber;
+      // 당첨자 발표 처리 (phase 변화뿐만 아니라 새로운 당첨자가 발표될 때마다 항상 트리거!)
+      if (currentPhase === 'ANNOUNCED' && currentWinner) {
+        if (winnerTime !== prevWinnerTimeRef.current) {
+          prevWinnerTimeRef.current = winnerTime;
 
-          if (currentNumber !== null && currentNumber === winnerNum) {
+          const myNumber = currentMe?.number || (savedId ? parseInt(localStorage.getItem('lucky_draw_participant_number') || '0', 10) : null);
+          const isMe = myNumber !== null && myNumber === currentWinner.winnerNumber;
+
+          if (isMe) {
             triggerWinnerCelebration();
           } else {
             soundFX.playCheer();
           }
 
-          // 호명 카운트다운 타이머
+          // 호명 카운트다운 타이머 시작
           setTimerSeconds(30);
           if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
           timerIntervalRef.current = setInterval(() => {
@@ -163,16 +179,15 @@ export function useParticipant() {
               return prev - 1;
             });
           }, 1000);
-        } else if (currentPhase === 'IDLE') {
-          if (rollingIntervalRef.current) {
-            clearInterval(rollingIntervalRef.current);
-            rollingIntervalRef.current = null;
-          }
-          if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
-          setTimerSeconds(null);
-          setShowWinnerSheet(false);
         }
+      } else if (currentPhase === 'IDLE') {
+        prevWinnerTimeRef.current = 0;
+        if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+        setTimerSeconds(null);
+        setShowWinnerSheet(false);
       }
+
+      prevPhaseRef.current = currentPhase || 'IDLE';
     });
 
     return () => {
