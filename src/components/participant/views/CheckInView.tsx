@@ -42,7 +42,7 @@ export const CheckInView: React.FC<CheckInViewProps> = ({
     if (isDup) {
       return {
         type: 'duplicate' as const,
-        message: `'${cleanName}'님은 이미 등록되어 있습니다. 본인이 맞으신가요?`,
+        message: `'${cleanName}' 님으로 발급된 입장 패스가 있습니다.`,
       };
     }
     return {
@@ -102,7 +102,7 @@ export const CheckInView: React.FC<CheckInViewProps> = ({
             disabled={isSubmitting}
             className={`w-full px-4 py-3.5 rounded-2xl bg-white/[0.06] border text-white font-semibold text-base placeholder-zinc-500 focus:outline-none transition-all disabled:opacity-50 ${
               isDuplicate
-                ? 'border-amber-500/70 focus:border-amber-400 bg-amber-500/5'
+                ? 'border-emerald-500/70 focus:border-emerald-400 bg-emerald-500/5'
                 : validationState?.type === 'success'
                 ? 'border-emerald-500/70 focus:border-emerald-500'
                 : 'border-white/15 focus:border-white/40 focus:bg-white/[0.1]'
@@ -113,22 +113,22 @@ export const CheckInView: React.FC<CheckInViewProps> = ({
           {validationState && (
             <div className="pt-1 text-xs">
               {validationState.type === 'duplicate' && (
-                <div className="space-y-1.5 p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20">
-                  <div className="text-amber-300 flex items-center gap-1.5 font-medium">
-                    <Ticket className="w-3.5 h-3.5 flex-shrink-0 text-amber-400" />
+                <div className="space-y-1.5 p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
+                  <div className="text-emerald-300 flex items-center gap-1.5 font-medium">
+                    <Ticket className="w-3.5 h-3.5 flex-shrink-0 text-emerald-400" />
                     <span>{validationState.message}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
                       onClick={() => onRecoverParticipant ? onRecoverParticipant(cleanName) : onSubmit()}
-                      className="px-2.5 py-1 rounded-lg bg-amber-400 hover:bg-amber-300 active:scale-95 text-black font-extrabold text-[11px] flex items-center gap-1 transition shadow-sm cursor-pointer"
+                      className="px-2.5 py-1 rounded-lg bg-emerald-400 hover:bg-emerald-300 active:scale-95 text-black font-extrabold text-[11px] flex items-center gap-1 transition shadow-sm cursor-pointer"
                     >
-                      <span>내 입장 패스 불러오기</span>
+                      <span>내 입장 패스 바로 열기</span>
                       <ArrowRight className="w-3 h-3" />
                     </button>
                     <span className="text-[10px] text-zinc-400">
-                      (다른 분이면 다른 닉네임 입력)
+                      (동명이인인 경우 닉네임 뒤에 숫자 입력)
                     </span>
                   </div>
                 </div>
@@ -151,22 +151,21 @@ export const CheckInView: React.FC<CheckInViewProps> = ({
 
         <button
           type="submit"
-          onClick={handleSubmitOrRecover}
           disabled={isButtonDisabled}
           className={`w-full py-4 rounded-2xl font-extrabold text-sm tracking-wide shadow-lg active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer ${
             isDuplicate 
-              ? 'bg-amber-400 hover:bg-amber-300 text-black' 
+              ? 'bg-emerald-400 hover:bg-emerald-300 text-black' 
               : 'text-black'
           }`}
           style={!isDuplicate ? { backgroundColor: themeCfg.accent } : undefined}
         >
           {isSubmitting ? (
             <span className="flex items-center gap-2">
-              <Clock className="w-4 h-4 animate-spin text-black" /> 패스 발급 중...
+              <Clock className="w-4 h-4 animate-spin text-black" /> 패스 확인 중...
             </span>
           ) : isDuplicate ? (
             <>
-              <Ticket className="w-4 h-4" /> 내 입장 패스 불러오기 <ArrowRight className="w-4 h-4" />
+              <Ticket className="w-4 h-4" /> &apos;{cleanName}&apos; 님 입장 패스 확인하기 <ArrowRight className="w-4 h-4" />
             </>
           ) : (
             <>

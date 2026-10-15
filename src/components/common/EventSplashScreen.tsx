@@ -16,18 +16,35 @@ export const EventSplashScreen: React.FC<EventSplashScreenProps> = ({
   posterSrc = '/images/poster.jpg',
   title = 'HALLOWEEN PARTY 🎃',
   dateText = '10.30 FRI — 10.31 SAT @ EULJIRO',
-  durationMs = 1400,
+  durationMs = 1200,
   onFinish,
 }) => {
-  const [isVisible, setIsVisible] = useState(true);
+  const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setIsVisible(false);
-      if (onFinish) onFinish();
-    }, durationMs);
+    if (typeof window === 'undefined') return;
 
-    return () => clearTimeout(timer);
+    // QR 스캔 진입 여부 확인 (?qr=... 또는 ?scan=... 등)
+    const params = new URLSearchParams(window.location.search);
+    const isFromQr = params.has('qr') || params.has('scan') || params.has('source');
+    
+    // 기기 최초 방문 여부 확인
+    const alreadySeen = localStorage.getItem('yuntaku_splash_seen');
+
+    // 최초 방문이거나 QR 스캔으로 진입했을 때만 1회 표시!
+    if (!alreadySeen || isFromQr) {
+      setIsVisible(true);
+      try {
+        localStorage.setItem('yuntaku_splash_seen', 'true');
+      } catch (e) {}
+
+      const timer = setTimeout(() => {
+        setIsVisible(false);
+        if (onFinish) onFinish();
+      }, durationMs);
+
+      return () => clearTimeout(timer);
+    }
   }, [durationMs, onFinish]);
 
   const handleSkip = () => {
@@ -42,8 +59,9 @@ export const EventSplashScreen: React.FC<EventSplashScreenProps> = ({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0, scale: 1.05 }}
-          transition={{ duration: 0.4 }}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/95 backdrop-blur-2xl p-4 overflow-hidden"
+          transition={{ duration: 0.35 }}
+          onClick={handleSkip}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/95 backdrop-blur-2xl p-4 overflow-hidden cursor-pointer"
         >
           {/* 배경 블러 포스터 */}
           <div
@@ -53,7 +71,10 @@ export const EventSplashScreen: React.FC<EventSplashScreenProps> = ({
 
           {/* 스킵 버튼 */}
           <button
-            onClick={handleSkip}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleSkip();
+            }}
             className="absolute top-6 right-6 z-20 px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-white/80 text-xs font-mono backdrop-blur-md border border-white/10 flex items-center gap-1 active:scale-95 transition"
           >
             <span>SKIP</span>
@@ -67,6 +88,7 @@ export const EventSplashScreen: React.FC<EventSplashScreenProps> = ({
             exit={{ scale: 0.95, opacity: 0 }}
             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
             className="relative z-10 w-full max-w-[340px] rounded-3xl overflow-hidden border border-white/20 shadow-2xl bg-zinc-900"
+            onClick={(e) => e.stopPropagation()}
           >
             <div className="relative aspect-[4/5] w-full overflow-hidden">
               <img
