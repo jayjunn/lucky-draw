@@ -94,23 +94,29 @@ export function useParticipant() {
     } catch {}
   }, [themeCfg.accent]);
 
-  // 실시간 Firebase 리스너 및 로컬 세션 복구
+  // 실시간 Firebase 리스너 및 로컬 세션 복구 (절대 자동 생성하지 않음!)
   useEffect(() => {
-    const savedId = localStorage.getItem('lucky_draw_participant_id');
-    const savedName = localStorage.getItem('lucky_draw_participant_name');
-
-    if (savedId && savedName) {
-      registerParticipantDirect(savedName, savedId)
-        .then((p) => setParticipant(p))
-        .catch(console.error);
-    }
+    const savedId = typeof window !== 'undefined' ? localStorage.getItem('lucky_draw_participant_id') : null;
 
     const unsubscribe = subscribeAppState((state: AppState) => {
       setAppState(state);
 
-      if (participant) {
-        const me = state.participants.find((p) => p.id === participant.id);
-        if (me) setParticipant(me);
+      // 1. 이미 등록된 참가자라면 세션 동기화
+      if (savedId) {
+        const found = state.participants.find((p) => p.id === savedId);
+        if (found) {
+          setParticipant(found);
+        } else {
+          // 어드민이 초기화하여 현재 명단에 없으면 이전 세션 클리어 -> 체크인 화면 노출
+          setParticipant(null);
+          try {
+            localStorage.removeItem('lucky_draw_participant_id');
+            localStorage.removeItem('lucky_draw_participant_name');
+            localStorage.removeItem('lucky_draw_participant_number');
+          } catch {}
+        }
+      } else {
+        setParticipant(null);
       }
 
       const currentPhase = state.drawState?.phase;
@@ -203,19 +209,21 @@ export function useParticipant() {
     try {
       setIsSubmitting(true);
       const newPart = await registerParticipantDirect(nameInput.trim());
-      setParticipant(newPart);
+      if (newPart) {
+        setParticipant(newPart);
 
-      try {
-        localStorage.setItem('lucky_draw_participant_id', newPart.id);
-        localStorage.setItem('lucky_draw_participant_name', newPart.name);
-        localStorage.setItem('lucky_draw_participant_number', newPart.number.toString());
-      } catch (storageErr) {
-        console.warn('LocalStorage 저장 제한:', storageErr);
+        try {
+          localStorage.setItem('lucky_draw_participant_id', newPart.id);
+          localStorage.setItem('lucky_draw_participant_name', newPart.name);
+          localStorage.setItem('lucky_draw_participant_number', newPart.number.toString());
+        } catch (storageErr) {
+          console.warn('LocalStorage 저장 제한:', storageErr);
+        }
+
+        try {
+          soundFX.playFanfare();
+        } catch {}
       }
-
-      try {
-        soundFX.playFanfare();
-      } catch {}
     } catch (err: any) {
       console.error('등록 실패:', err);
       alert('입장권 발급 오류: ' + (err?.message || '네트워크 상태를 확인해주세요.'));

@@ -129,9 +129,12 @@ app.prepare().then(() => {
 
       if (data.existingId) {
         participant = participants.find((p) => p.id === data.existingId);
-      }
-
-      if (!participant) {
+        if (!participant) {
+          // DB/메모리에 없는 ID(초기화됨)이면 자동 생성하지 않음!
+          return;
+        }
+      } else {
+        // 신규 등록일 때만 새 번호 채번
         participant = {
           id: 'user_' + Math.random().toString(36).substring(2, 9),
           number: nextParticipantNumber++,
@@ -140,10 +143,6 @@ app.prepare().then(() => {
           status: 'ACTIVE',
         };
         participants.push(participant);
-      } else {
-        if (data.name && data.name.trim()) {
-          participant.name = data.name.trim();
-        }
       }
 
       socket.emit('participant_registered', participant);

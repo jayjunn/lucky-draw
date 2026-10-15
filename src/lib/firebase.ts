@@ -85,7 +85,7 @@ export function subscribeAppState(callback: (state: AppState) => void): Unsubscr
 }
 
 // 2. 참가자 등록 (Client-side Firebase Direct)
-export async function registerParticipantDirect(name: string, existingId?: string): Promise<Participant> {
+export async function registerParticipantDirect(name: string, existingId?: string): Promise<Participant | null> {
   const firestore = getFirebaseDb();
   const eventRef = doc(firestore, EVENT_DOC_PATH[0], EVENT_DOC_PATH[1]);
   const snap = await getDoc(eventRef);
@@ -96,13 +96,14 @@ export async function registerParticipantDirect(name: string, existingId?: strin
     currentParticipants = data.participants || [];
   }
 
-  // 기존 등록자 재접속 확인
+  // 기존 등록자 재접속 확인 (존재하지 않으면 절대 자동 생성하지 않고 null 반환!)
   if (existingId) {
     const found = currentParticipants.find((p) => p.id === existingId);
     if (found) return found;
+    return null; // DB에 없으면(초기화된 상태) 새 번호를 만들지 않음
   }
 
-  // 신규 번호 채번
+  // 신규 번호 채번 (사용자가 직접 닉네임을 입력하고 버튼을 눌렀을 때만 실행)
   const maxNumber = currentParticipants.reduce((max, p) => Math.max(max, p.number || 0), 0);
   const nextNumber = maxNumber + 1;
   const newParticipant: Participant = {
