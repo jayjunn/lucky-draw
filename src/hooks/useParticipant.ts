@@ -100,24 +100,39 @@ export function useParticipant() {
     const unsubscribe = subscribeAppState((state: AppState) => {
       setAppState(state);
 
-      // 매 스냅샷마다 최신 세션 ID 확인 (신규 등록 시 즉시 반영 보장)
+      // 세션 참가자 매칭: ID 또는 Name으로 안전하게 복구
       const currentSavedId = typeof window !== 'undefined' ? localStorage.getItem('lucky_draw_participant_id') : null;
-      const targetId = currentSavedId || participantRef.current?.id;
+      const currentSavedName = typeof window !== 'undefined' ? localStorage.getItem('lucky_draw_participant_name') : null;
+
+      const targetId = participantRef.current?.id || currentSavedId;
+      const targetName = participantRef.current?.name || currentSavedName;
 
       let currentMe: Participant | null = null;
-      if (targetId) {
-        const found = state.participants.find((p) => p.id === targetId);
+      if (targetId || targetName) {
+        const found = state.participants.find((p) => 
+          (targetId && p.id === targetId) ||
+          (targetName && p.name.trim().toLowerCase() === targetName.trim().toLowerCase())
+        );
+
         if (found) {
           currentMe = found;
           setParticipant(found);
+          participantRef.current = found;
+
+          try {
+            localStorage.setItem('lucky_draw_participant_id', found.id);
+            localStorage.setItem('lucky_draw_participant_name', found.name);
+            localStorage.setItem('lucky_draw_participant_number', found.number.toString());
+          } catch {}
 
           // 내가 당첨자인데 아직 출석 확인을 안 했다면 바로 당첨 화면 띄우기!
           if (found.isWinner && !found.presenceConfirmed) {
             setShowWinnerSheet(true);
           }
-        } else {
-          // 어드민이 초기화하여 현재 명단에 없으면 이전 세션 클리어 -> 체크인 화면 노출
+        } else if (state.participants.length === 0) {
+          // 어드민이 명단을 '0명 완전 초기화'했을 때만 세션 클리어!
           setParticipant(null);
+          participantRef.current = null;
           try {
             localStorage.removeItem('lucky_draw_participant_id');
             localStorage.removeItem('lucky_draw_participant_name');
@@ -209,7 +224,7 @@ export function useParticipant() {
       if (rollingIntervalRef.current) clearInterval(rollingIntervalRef.current);
       if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
     };
-  }, [participant?.id, participant?.number, triggerWinnerCelebration]);
+  }, [triggerWinnerCelebration]);
 
   // QR 코드 자동 생성
   useEffect(() => {
@@ -255,6 +270,7 @@ export function useParticipant() {
         soundFX.playFanfare();
       } catch {}
       Haptic.success();
+      setNameInput('');
       return true;
     }
     return false;
@@ -283,6 +299,10 @@ export function useParticipant() {
 
     try {
       setIsSubmitting(true);
+      try {
+        localStorage.setItem('lucky_draw_participant_name', clean);
+      } catch {}
+
       const newPart = await registerParticipantDirect(clean);
       if (newPart) {
         setParticipant(newPart);
@@ -300,6 +320,7 @@ export function useParticipant() {
           soundFX.playFanfare();
         } catch {}
         Haptic.success();
+        setNameInput('');
       }
     } catch (err: any) {
       console.error('등록 실패:', err);
@@ -308,6 +329,7 @@ export function useParticipant() {
       );
       if (retryExisting) {
         handleRecoverParticipant(clean);
+        setNameInput('');
         return;
       }
       Haptic.warning();
