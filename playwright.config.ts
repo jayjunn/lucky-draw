@@ -35,6 +35,6 @@ export default defineConfig({
     command: 'npm start',
     url: 'http://localhost:3000',
     reuseExistingServer: true,
-    timeout: 15 * 1000,
+    timeout: 60 * 1000,
   },
 });
