@@ -48,7 +48,7 @@ export const AdminDrawTab: React.FC<AdminDrawTabProps> = ({
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
       {/* 좌측: 단계별 추첨 제어 */}
-      <div className="lg:col-span-7 space-y-4">
+      <div className="lg:col-span-7 xl:col-span-8 space-y-4">
         <div className="p-5 rounded-2xl bg-white border border-zinc-200 shadow-sm space-y-4">
           <div className="flex items-center justify-between pb-3 border-b border-zinc-100">
             <div>
@@ -84,135 +84,136 @@ export const AdminDrawTab: React.FC<AdminDrawTabProps> = ({
                       : 'bg-white border-zinc-200'
                   }`}
                 >
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      <span className="px-2 py-0.5 rounded bg-zinc-100 text-zinc-800 text-xs font-bold">
+                  {/* 1. 상단: 상품 기본 정보 및 상태 */}
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <span className="px-2.5 py-1 rounded-md bg-zinc-100 text-zinc-900 text-xs font-black shrink-0">
                         {prize.rank}등
                       </span>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h4 className="text-xs font-bold text-zinc-900">{prize.title}</h4>
-                          {!isWon && (
-                            <span className="text-[10px] px-1.5 py-0.2 rounded bg-zinc-100 text-zinc-600 font-semibold">
-                              {currentBatchCount}명 추첨
-                            </span>
-                          )}
-                        </div>
+                      <h4 className="text-sm font-bold text-zinc-900 truncate">
+                        {prize.title}
+                      </h4>
+                    </div>
 
-                        {/* 단일 당첨자일 때 요약 표시 */}
-                        {isWon && !hasMultipleWinners && prize.winner && (
-                          <div className="flex items-center gap-2 mt-0.5 text-xs">
-                            <span className="font-bold text-zinc-800 font-mono">
-                              당첨: #{String(prize.winner.number).padStart(3, '0')} ({prize.winner.name})
-                            </span>
-                            {prize.winner.confirmed ? (
-                              <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
-                                출석확인됨
-                              </span>
-                            ) : (
-                              <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-zinc-100 text-zinc-500 animate-pulse">
-                                출석대기
-                              </span>
-                            )}
-                          </div>
-                        )}
-
-                        {!isWon && (
-                          <p className="text-[11px] text-zinc-400 font-sans">추첨 대기</p>
+                    {/* 단일 당첨자일 때 당첨자 요약 뱃지 */}
+                    {isWon && !hasMultipleWinners && prize.winner ? (
+                      <div className="flex items-center gap-1.5 shrink-0 text-xs">
+                        <span className="font-bold text-zinc-800 font-mono">
+                          #{String(prize.winner.number).padStart(3, '0')} {prize.winner.name}
+                        </span>
+                        {prize.winner.confirmed ? (
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                            출석확인됨
+                          </span>
+                        ) : (
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 animate-pulse">
+                            출석대기
+                          </span>
                         )}
                       </div>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      {!isWon ? (
-                        <>
-                          {/* 추첨 인원수 조절 스텝퍼 및 퀵 버튼 */}
-                          {onSetBatchCount && (
-                            <div className="flex items-center gap-1 mr-1 bg-zinc-100 p-1 rounded-lg">
-                              <button
-                                onClick={() => onSetBatchCount(prize.rank, Math.max(1, currentBatchCount - 1))}
-                                className="w-5 h-5 rounded bg-white text-zinc-700 text-xs font-bold flex items-center justify-center hover:bg-zinc-200"
-                                title="1명 감소"
-                              >
-                                -
-                              </button>
-                              <span className="text-xs font-bold px-1 text-zinc-800 font-mono">
-                                {currentBatchCount}명
-                              </span>
-                              <button
-                                onClick={() => onSetBatchCount(prize.rank, currentBatchCount + 1)}
-                                className="w-5 h-5 rounded bg-white text-zinc-700 text-xs font-bold flex items-center justify-center hover:bg-zinc-200"
-                                title="1명 증가"
-                              >
-                                +
-                              </button>
-                              <div className="flex gap-0.5 ml-1 border-l border-zinc-200 pl-1">
-                                {[1, 2, 3, 5].map((cnt) => (
-                                  <button
-                                    key={cnt}
-                                    data-testid={`batch-preset-${cnt}`}
-                                    aria-label={`${cnt}명 설정`}
-                                    onClick={() => onSetBatchCount(prize.rank, cnt)}
-                                    className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                                      currentBatchCount === cnt
-                                        ? 'bg-zinc-900 text-white'
-                                        : 'bg-white text-zinc-600 hover:bg-zinc-200'
-                                    }`}
-                                  >
-                                    {cnt}
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-
-                          <button
-                            onClick={() => onStartDraw(prize.rank, currentBatchCount)}
-                            disabled={isRoulette}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 ${
-                              isRoulette
-                                ? 'bg-zinc-900 text-white animate-pulse'
-                                : 'bg-zinc-100 hover:bg-zinc-200 text-zinc-800'
-                            }`}
-                          >
-                            <Play className="w-3 h-3" />
-                            {isRoulette
-                              ? currentBatchCount > 1
-                                ? `${currentBatchCount}명 롤링 중`
-                                : '롤링 중'
-                              : currentBatchCount > 1
-                              ? `${currentBatchCount}명 롤링`
-                              : '1. 롤링'}
-                          </button>
-
-                          <button
-                            onClick={() => onAnnounceWinner(prize.rank, currentBatchCount)}
-                            className="px-3 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-bold transition flex items-center gap-1 shadow-sm"
-                          >
-                            <Sparkles className="w-3 h-3" />
-                            {currentBatchCount > 1 ? `${currentBatchCount}명 발표` : '2. 발표'}
-                          </button>
-                        </>
-                      ) : !hasMultipleWinners ? (
-                        <>
-                          <button
-                            onClick={() => onRedrawAbsent(prize.rank)}
-                            className="px-2.5 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs font-bold transition flex items-center gap-1 shadow-sm"
-                            title="자리에 없으면 실격 처리하고 즉시 다음 사람을 뽑습니다"
-                          >
-                            <AlertTriangle className="w-3 h-3" /> 부재중 재추첨
-                          </button>
-
-                          <button
-                            onClick={() => onStartTimer(30)}
-                            className="px-2 py-1.5 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-xs font-bold text-zinc-700 transition flex items-center gap-1"
-                          >
-                            <Clock className="w-3 h-3 text-red-500" /> 30s
-                          </button>
-                        </>
-                      ) : null}
-                    </div>
+                    ) : !isWon ? (
+                      <span className="text-[11px] text-zinc-400 font-sans shrink-0">추첨 대기</span>
+                    ) : null}
                   </div>
+
+                  {/* 2. 하단: 추첨 조작 바 (추첨 전) */}
+                  {!isWon && (
+                    <div className="mt-3 pt-2.5 border-t border-zinc-100 flex flex-wrap sm:flex-nowrap items-center justify-between gap-2.5">
+                      {/* 좌측: 인원 설정 */}
+                      {onSetBatchCount && (
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[11px] font-bold text-zinc-500 shrink-0">인원</span>
+                          <div className="flex items-center bg-zinc-100 p-0.5 rounded-lg border border-zinc-200">
+                            <button
+                              onClick={() => onSetBatchCount(prize.rank, Math.max(1, currentBatchCount - 1))}
+                              className="w-5 h-5 rounded bg-white text-zinc-700 text-xs font-bold flex items-center justify-center hover:bg-zinc-200 shadow-xs cursor-pointer"
+                              title="1명 감소"
+                            >
+                              -
+                            </button>
+                            <span className="w-9 text-center text-xs font-bold text-zinc-800 font-mono">
+                              {currentBatchCount}명
+                            </span>
+                            <button
+                              onClick={() => onSetBatchCount(prize.rank, currentBatchCount + 1)}
+                              className="w-5 h-5 rounded bg-white text-zinc-700 text-xs font-bold flex items-center justify-center hover:bg-zinc-200 shadow-xs cursor-pointer"
+                              title="1명 증가"
+                            >
+                              +
+                            </button>
+                          </div>
+
+                          <div className="flex gap-1 ml-1 border-l border-zinc-200 pl-1.5">
+                            {[1, 2, 3, 5].map((cnt) => (
+                              <button
+                                key={cnt}
+                                data-testid={`batch-preset-${cnt}`}
+                                aria-label={`${cnt}명 설정`}
+                                onClick={() => onSetBatchCount(prize.rank, cnt)}
+                                className={`w-5 h-5 rounded text-[10px] font-bold flex items-center justify-center transition cursor-pointer ${
+                                  currentBatchCount === cnt
+                                    ? 'bg-zinc-900 text-white shadow-xs'
+                                    : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
+                                }`}
+                              >
+                                {cnt}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* 우측: 롤링 & 발표 버튼 (나란히 정렬, 절대 줄바꿈 없음) */}
+                      <div className="flex items-center gap-2 shrink-0 ml-auto">
+                        <button
+                          onClick={() => onStartDraw(prize.rank, currentBatchCount)}
+                          disabled={isRoulette}
+                          className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 shrink-0 cursor-pointer ${
+                            isRoulette
+                              ? 'bg-zinc-900 text-white animate-pulse'
+                              : 'bg-zinc-100 hover:bg-zinc-200 text-zinc-800'
+                          }`}
+                        >
+                          <Play className="w-3 h-3" />
+                          {isRoulette
+                            ? currentBatchCount > 1
+                              ? `${currentBatchCount}명 롤링 중`
+                              : '롤링 중'
+                            : currentBatchCount > 1
+                            ? `${currentBatchCount}명 롤링`
+                            : '1. 롤링'}
+                        </button>
+
+                        <button
+                          onClick={() => onAnnounceWinner(prize.rank, currentBatchCount)}
+                          className="px-3.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-bold transition flex items-center gap-1 shadow-sm shrink-0 cursor-pointer"
+                        >
+                          <Sparkles className="w-3 h-3" />
+                          {currentBatchCount > 1 ? `${currentBatchCount}명 발표` : '2. 발표'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 3. 단일 당첨자 관리 바 (추첨 후) */}
+                  {isWon && !hasMultipleWinners && (
+                    <div className="mt-2.5 pt-2 border-t border-zinc-200/60 flex items-center justify-end gap-1.5">
+                      <button
+                        onClick={() => onRedrawAbsent(prize.rank)}
+                        className="px-2.5 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs font-bold transition flex items-center gap-1 shadow-sm cursor-pointer"
+                        title="자리에 없으면 실격 처리하고 즉시 다음 사람을 뽑습니다"
+                      >
+                        <AlertTriangle className="w-3 h-3" /> 부재중 재추첨
+                      </button>
+
+                      <button
+                        onClick={() => onStartTimer(30)}
+                        className="px-2 py-1.5 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-xs font-bold text-zinc-700 transition flex items-center gap-1 cursor-pointer"
+                      >
+                        <Clock className="w-3 h-3 text-red-500" /> 30s
+                      </button>
+                    </div>
+                  )}
 
                   {/* 다중 당첨자 목록 및 개별 출석 확인 / 재추첨 컨트롤 */}
                   {isWon && hasMultipleWinners && prize.winners && (
@@ -299,7 +300,7 @@ export const AdminDrawTab: React.FC<AdminDrawTabProps> = ({
       </div>
 
       {/* 우측: 참가자 리스트 */}
-      <div className="lg:col-span-5 space-y-4">
+      <div className="lg:col-span-5 xl:col-span-4 space-y-4">
         <div className="p-5 rounded-2xl bg-white border border-zinc-200 shadow-sm space-y-3">
           <div className="flex items-center justify-between pb-3 border-b border-zinc-100">
             <h3 className="text-xs font-bold text-zinc-800 uppercase tracking-wider flex items-center gap-1.5">
