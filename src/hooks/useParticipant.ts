@@ -168,7 +168,12 @@ export function useParticipant() {
       }
 
       // 당첨자 발표 처리
-      if (currentPhase === 'ANNOUNCED' && currentWinner) {
+      const announcedWinners = state.drawState?.currentWinners && state.drawState.currentWinners.length > 0
+        ? state.drawState.currentWinners
+        : (currentWinner ? [currentWinner] : []);
+
+      if (currentPhase === 'ANNOUNCED' && announcedWinners.length > 0) {
+        const winnerTime = announcedWinners[0]?.announcedAt || currentWinner?.announcedAt || 0;
         const isFreshAnnouncement = prevWinnerTimeRef.current !== 0 && winnerTime !== prevWinnerTimeRef.current;
         const timeSinceAnnouncedSec = winnerTime ? Math.floor((Date.now() - winnerTime) / 1000) : 999;
 
@@ -176,7 +181,7 @@ export function useParticipant() {
           prevWinnerTimeRef.current = winnerTime;
 
           const myNumber = currentMe?.number || (targetId ? parseInt(localStorage.getItem('lucky_draw_participant_number') || '0', 10) : null);
-          const isMe = myNumber !== null && myNumber === currentWinner.winnerNumber;
+          const isMe = myNumber !== null && announcedWinners.some((w) => w.winnerNumber === myNumber);
 
           // 실시간으로 방금 발표되었거나 15초 이내의 최신 발표일 때만 축하 효과 발동
           if (isFreshAnnouncement || timeSinceAnnouncedSec < 15) {
@@ -392,8 +397,13 @@ export function useParticipant() {
   const isMeWinner = participant?.isWinner;
   const currentDraw = appState?.drawState;
   const isRouletteActive = currentDraw?.phase === 'ROULETTE';
-  const isAnnounced = Boolean(currentDraw?.phase === 'ANNOUNCED' && currentDraw?.currentWinner);
-  const amIThisRoundWinner = Boolean(isAnnounced && participant && currentDraw?.currentWinner?.winnerNumber === participant.number);
+  const roundWinners = currentDraw?.currentWinners && currentDraw.currentWinners.length > 0
+    ? currentDraw.currentWinners
+    : (currentDraw?.currentWinner ? [currentDraw.currentWinner] : []);
+  const isAnnounced = Boolean(currentDraw?.phase === 'ANNOUNCED' && roundWinners.length > 0);
+  const amIThisRoundWinner = Boolean(
+    isAnnounced && participant && roundWinners.some((w) => w.winnerNumber === participant.number)
+  );
 
   return {
     participant,

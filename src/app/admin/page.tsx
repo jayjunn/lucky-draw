@@ -41,6 +41,9 @@ export default function AdminPage() {
     handleStartDraw,
     handleAnnounceWinner,
     handleRedrawAbsent,
+    handleRedrawSpecificAbsent,
+    batchCounts,
+    setBatchCountForRank,
     handleStartTimer,
     handleGenerateDummies,
     handleResetDraws,
@@ -235,6 +238,9 @@ export default function AdminPage() {
             onStartDraw={handleStartDraw}
             onAnnounceWinner={handleAnnounceWinner}
             onRedrawAbsent={handleRedrawAbsent}
+            onRedrawSpecificAbsent={handleRedrawSpecificAbsent}
+            batchCounts={batchCounts}
+            onSetBatchCount={setBatchCountForRank}
             onStartTimer={handleStartTimer}
             participants={participants}
             searchQuery={searchQuery}

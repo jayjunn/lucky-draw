@@ -30,6 +30,7 @@ export default function DisplayPage() {
     toggleSound,
     toggleFullScreen,
     rollingNumber,
+    rollingNumbers,
     reactions,
     timerSeconds,
     presenceAlert,
@@ -39,7 +40,11 @@ export default function DisplayPage() {
 
   const currentDraw = appState?.drawState;
   const isRoulette = currentDraw?.phase === 'ROULETTE';
-  const isAnnounced = currentDraw?.phase === 'ANNOUNCED' && currentDraw.currentWinner;
+  const announcedWinners = currentDraw?.currentWinners && currentDraw.currentWinners.length > 0
+    ? currentDraw.currentWinners
+    : (currentDraw?.currentWinner ? [currentDraw.currentWinner] : []);
+  const isAnnounced = currentDraw?.phase === 'ANNOUNCED' && announcedWinners.length > 0;
+  const isMultiWinner = announcedWinners.length > 1;
   const activePrize = appState?.prizes.find((p) => p.rank === currentDraw?.currentRank);
 
   const displayThemes = {
@@ -205,69 +210,159 @@ export default function DisplayPage() {
               initial={{ opacity: 0, scale: 0.98 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.98 }}
-              className="text-center space-y-6 max-w-xl w-full"
+              className="text-center space-y-6 max-w-4xl w-full"
             >
               <div className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-full font-bold text-xs shadow-md ${currentTheme.badge}`}>
                 <Clock className="w-3.5 h-3.5 animate-spin" />
-                <span>[{currentDraw?.currentRank}등] 럭키드로우 롤링 중</span>
+                <span>
+                  [{currentDraw?.currentRank}등] {rollingNumbers.length > 1 ? `${rollingNumbers.length}명 일괄 롤링 중` : '럭키드로우 롤링 중'}
+                </span>
               </div>
 
               <div className="space-y-1">
                 <h2 className="text-3xl lg:text-4xl font-black tracking-tight">
                   {activePrize?.title}
                 </h2>
-                <p className="text-xs opacity-70 font-sans">과연 행운의 주인공은 누구일까요?</p>
+                <p className="text-xs opacity-70 font-sans">
+                  {rollingNumbers.length > 1
+                    ? `총 ${rollingNumbers.length}명의 행운의 주인공을 동시에 추첨합니다!`
+                    : '과연 행운의 주인공은 누구일까요?'}
+                </p>
               </div>
 
-              <div className={`mx-auto w-72 h-44 lg:w-96 lg:h-52 rounded-2xl border backdrop-blur-2xl flex items-center justify-center shadow-2xl ${currentTheme.mainCard}`}>
-                <div className={`text-7xl lg:text-8xl font-black font-mono tracking-wider ${currentTheme.numberText}`}>
-                  #{String(rollingNumber).padStart(3, '0')}
+              {rollingNumbers.length > 1 ? (
+                /* 다중 롤링 슬롯 머신 */
+                <div className="flex flex-wrap justify-center items-center gap-3 lg:gap-4 pt-2">
+                  {rollingNumbers.map((num, idx) => (
+                    <motion.div
+                      key={idx}
+                      initial={{ scale: 0.9, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      className={`w-36 h-28 sm:w-44 sm:h-32 lg:w-48 lg:h-36 rounded-2xl border backdrop-blur-2xl flex flex-col items-center justify-center shadow-xl ${currentTheme.mainCard}`}
+                    >
+                      <span className="text-[10px] font-bold opacity-60 uppercase tracking-wider mb-1">
+                        SLOT #{idx + 1}
+                      </span>
+                      <div className={`text-4xl sm:text-5xl font-black font-mono tracking-wider ${currentTheme.numberText}`}>
+                        #{String(num).padStart(3, '0')}
+                      </div>
+                    </motion.div>
+                  ))}
                 </div>
-              </div>
+              ) : (
+                /* 단일 롤링 슬롯 머신 */
+                <div className={`mx-auto w-72 h-44 lg:w-96 lg:h-52 rounded-2xl border backdrop-blur-2xl flex items-center justify-center shadow-2xl ${currentTheme.mainCard}`}>
+                  <div className={`text-7xl lg:text-8xl font-black font-mono tracking-wider ${currentTheme.numberText}`}>
+                    #{String(rollingNumber).padStart(3, '0')}
+                  </div>
+                </div>
+              )}
             </motion.div>
           ) : isAnnounced ? (
-            <motion.div
-              key="announced"
-              initial={{ opacity: 0, scale: 0.96 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.35 }}
-              className="text-center space-y-6 max-w-2xl w-full"
-            >
-              <div className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-full font-black text-xs tracking-wider shadow-lg ${currentTheme.badge}`}>
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>{currentDraw?.currentWinner?.rank}등 당첨자 발표</span>
-              </div>
-
-              <h2 className="text-3xl lg:text-5xl font-black tracking-tight">
-                {currentDraw?.currentWinner?.prize}
-              </h2>
-
-              <div className={`mx-auto max-w-lg rounded-2xl border backdrop-blur-2xl p-8 shadow-2xl ${currentTheme.mainCard}`}>
-                <div className="text-[10px] font-bold uppercase opacity-60 tracking-widest mb-1">
-                  WINNER TICKET NUMBER
-                </div>
-                <div className={`text-7xl lg:text-8xl font-black font-mono ${currentTheme.numberText}`}>
-                  #{String(currentDraw?.currentWinner?.winnerNumber).padStart(3, '0')}
-                </div>
-                <div className="mt-2 text-2xl font-bold">
-                  {currentDraw?.currentWinner?.winnerName} <span className="text-base font-normal opacity-60">님</span>
+            isMultiWinner ? (
+              /* 다중 당첨자 동시 발표 그리드 */
+              <motion.div
+                key="announced-multi"
+                initial={{ opacity: 0, scale: 0.96 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.35 }}
+                className="text-center space-y-6 max-w-4xl w-full"
+              >
+                <div className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-full font-black text-xs tracking-wider shadow-lg ${currentTheme.badge}`}>
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>[{currentDraw?.currentRank}등] 총 {announcedWinners.length}명 동시 당첨 발표!</span>
                 </div>
 
-                {currentDraw?.currentWinner?.confirmed ? (
-                  <motion.div
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    className="mt-4 py-2 px-4 rounded-lg bg-emerald-500/20 text-emerald-300 text-xs font-bold border border-emerald-400 flex items-center justify-center gap-1.5"
-                  >
-                    <Hand className="w-4 h-4 text-emerald-400" /> 🙋 참가자 출석 확인 완료 (무대 이동 중)
-                  </motion.div>
-                ) : (
-                  <p className="text-xs mt-3 opacity-70 font-sans">
-                    모바일 화면에서 [출석 확인]을 누르거나 즉시 무대로 나와주세요!
+                <div className="space-y-1">
+                  <h2 className="text-3xl lg:text-4xl font-black tracking-tight">
+                    {activePrize?.title || currentDraw?.currentWinner?.prize}
+                  </h2>
+                  <p className="text-xs opacity-70 font-sans">
+                    축하합니다! 모바일 화면에서 [출석 확인]을 누르고 무대로 나와주세요!
                   </p>
-                )}
-              </div>
-            </motion.div>
+                </div>
+
+                <div className={`grid gap-3 sm:gap-4 max-w-3xl mx-auto ${
+                  announcedWinners.length === 2 ? 'grid-cols-2' :
+                  announcedWinners.length === 3 ? 'grid-cols-1 sm:grid-cols-3' :
+                  announcedWinners.length === 4 ? 'grid-cols-2 sm:grid-cols-4' :
+                  'grid-cols-2 sm:grid-cols-3 lg:grid-cols-5'
+                }`}>
+                  {announcedWinners.map((w, idx) => (
+                    <motion.div
+                      key={w.winnerNumber}
+                      initial={{ scale: 0.85, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      transition={{ delay: idx * 0.1 }}
+                      className={`p-4 rounded-2xl border backdrop-blur-2xl shadow-xl flex flex-col items-center justify-between text-center ${currentTheme.mainCard}`}
+                    >
+                      <div className="text-[10px] font-bold uppercase opacity-60 tracking-wider">
+                        WINNER #{idx + 1}
+                      </div>
+                      <div className={`text-4xl lg:text-5xl font-black font-mono my-2 ${currentTheme.numberText}`}>
+                        #{String(w.winnerNumber).padStart(3, '0')}
+                      </div>
+                      <div className="text-base font-bold truncate max-w-full">
+                        {w.winnerName} <span className="text-xs font-normal opacity-60">님</span>
+                      </div>
+                      {w.confirmed ? (
+                        <div className="mt-2.5 px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-bold border border-emerald-400 flex items-center gap-1">
+                          <Hand className="w-3 h-3 text-emerald-400" /> 출석 확인됨
+                        </div>
+                      ) : (
+                        <div className="mt-2.5 px-2.5 py-1 rounded-full bg-white/10 text-white/70 text-[10px] font-medium">
+                          출석 대기
+                        </div>
+                      )}
+                    </motion.div>
+                  ))}
+                </div>
+              </motion.div>
+            ) : (
+              /* 단일 당첨자 발표 */
+              <motion.div
+                key="announced"
+                initial={{ opacity: 0, scale: 0.96 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.35 }}
+                className="text-center space-y-6 max-w-2xl w-full"
+              >
+                <div className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-full font-black text-xs tracking-wider shadow-lg ${currentTheme.badge}`}>
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>{currentDraw?.currentWinner?.rank}등 당첨자 발표</span>
+                </div>
+
+                <h2 className="text-3xl lg:text-5xl font-black tracking-tight">
+                  {currentDraw?.currentWinner?.prize}
+                </h2>
+
+                <div className={`mx-auto max-w-lg rounded-2xl border backdrop-blur-2xl p-8 shadow-2xl ${currentTheme.mainCard}`}>
+                  <div className="text-[10px] font-bold uppercase opacity-60 tracking-widest mb-1">
+                    WINNER TICKET NUMBER
+                  </div>
+                  <div className={`text-7xl lg:text-8xl font-black font-mono ${currentTheme.numberText}`}>
+                    #{String(currentDraw?.currentWinner?.winnerNumber).padStart(3, '0')}
+                  </div>
+                  <div className="mt-2 text-2xl font-bold">
+                    {currentDraw?.currentWinner?.winnerName} <span className="text-base font-normal opacity-60">님</span>
+                  </div>
+
+                  {currentDraw?.currentWinner?.confirmed ? (
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.95 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      className="mt-4 py-2 px-4 rounded-lg bg-emerald-500/20 text-emerald-300 text-xs font-bold border border-emerald-400 flex items-center justify-center gap-1.5"
+                    >
+                      <Hand className="w-4 h-4 text-emerald-400" /> 🙋 참가자 출석 확인 완료 (무대 이동 중)
+                    </motion.div>
+                  ) : (
+                    <p className="text-xs mt-3 opacity-70 font-sans">
+                      모바일 화면에서 [출석 확인]을 누르거나 즉시 무대로 나와주세요!
+                    </p>
+                  )}
+                </div>
+              </motion.div>
+            )
           ) : (
             <motion.div
               key="idle"
@@ -312,7 +407,8 @@ export default function DisplayPage() {
             ?.slice()
             .sort((a, b) => b.rank - a.rank)
             .map((prize) => {
-              const isWon = Boolean(prize.winner);
+              const hasMultiWinners = Boolean(prize.winners && prize.winners.length > 1);
+              const isWon = Boolean(prize.winner || (prize.winners && prize.winners.length > 0));
               const isCurrent = currentDraw?.currentRank === prize.rank;
               const absentCount = prize.absentHistory?.length || 0;
 
@@ -348,16 +444,32 @@ export default function DisplayPage() {
                     {prize.title}
                   </p>
 
-                  <div className="mt-2 pt-1.5 border-t border-current/20 flex items-center justify-between text-xs">
-                    {isWon && prize.winner ? (
-                      <>
-                        <span className="font-bold font-mono">
-                          #{String(prize.winner.number).padStart(3, '0')}
-                        </span>
-                        <span className="truncate max-w-[80px]">
-                          {prize.winner.name}
-                        </span>
-                      </>
+                  <div className="mt-2 pt-1.5 border-t border-current/20 text-xs">
+                    {isWon ? (
+                      hasMultiWinners && prize.winners ? (
+                        <div>
+                          <div className="flex items-center justify-between font-bold">
+                            <span>총 {prize.winners.length}명 당첨</span>
+                            <span className="text-[10px] opacity-75">
+                              {prize.winners.filter((w) => w.confirmed).length}/{prize.winners.length} 출석
+                            </span>
+                          </div>
+                          <div className="text-[10px] font-mono opacity-80 truncate mt-0.5">
+                            {prize.winners.map((w) => `#${w.number}`).join(', ')}
+                          </div>
+                        </div>
+                      ) : prize.winner ? (
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold font-mono">
+                            #{String(prize.winner.number).padStart(3, '0')}
+                          </span>
+                          <span className="truncate max-w-[80px]">
+                            {prize.winner.name}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-[10px] opacity-60">--</span>
+                      )
                     ) : (
                       <span className="text-[10px] opacity-60">--</span>
                     )}

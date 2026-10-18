@@ -150,8 +150,8 @@ app.prepare().then(() => {
       saveEventStateToDb(getAppState()).catch(() => {});
     });
 
-    // 2. 관리자: 룰렛/추첨 시작
-    socket.on('admin_start_draw', (data: { rank: number }) => {
+    // 2. 관리자: 룰렛/추첨 시작 (일괄 추첨 지원)
+    socket.on('admin_start_draw', (data: { rank: number; count?: number }) => {
       const prize = prizes.find((p) => p.rank === data.rank);
       if (!prize) return;
 
@@ -160,71 +160,104 @@ app.prepare().then(() => {
         timerInterval = null;
       }
 
+      const batchCount = Math.max(1, data.count || prize.count || 1);
+
       drawState = {
         currentRank: data.rank,
         phase: 'ROULETTE',
+        batchCount,
         currentWinner: null,
+        currentWinners: [],
         callTimer: null,
       };
 
       io.emit('draw_roulette_start', {
         rank: data.rank,
         prize: prize.title,
+        batchCount,
       });
       io.emit('state_sync', getAppState());
     });
 
-    // 3. 관리자: 당첨자 확정 및 발표! (Firebase 저장)
-    socket.on('admin_announce_winner', async (data: { rank: number; targetNumber?: number }) => {
+    // 3. 관리자: 당첨자 확정 및 발표! (일괄 다중 발표 지원)
+    socket.on('admin_announce_winner', async (data: { rank: number; targetNumber?: number; count?: number }) => {
       const prize = prizes.find((p) => p.rank === data.rank);
       if (!prize) return;
 
-      const winner = pickNextWinner(data.rank, data.targetNumber);
+      const targetCount = Math.max(1, data.count || prize.count || 1);
+      const chosenWinners: Participant[] = [];
 
-      if (!winner) {
+      if (data.targetNumber) {
+        const specified = pickNextWinner(data.rank, data.targetNumber);
+        if (specified) chosenWinners.push(specified);
+      }
+
+      while (chosenWinners.length < targetCount) {
+        const next = pickNextWinner(data.rank);
+        if (!next) break;
+        if (!chosenWinners.some((w) => w.number === next.number)) {
+          chosenWinners.push(next);
+        }
+      }
+
+      if (chosenWinners.length === 0) {
         socket.emit('admin_alert', { message: '추첨 가능한 남은 참가자가 없습니다.' });
         return;
       }
 
-      prize.winner = {
+      const now = Date.now();
+      const announcedWinners = chosenWinners.map((winner) => ({
+        rank: prize.rank,
+        prize: prize.title,
+        winnerNumber: winner.number,
+        winnerName: winner.name,
+        announcedAt: now,
+        confirmed: false,
+        participantId: winner.id,
+      }));
+
+      const newWinnersData = chosenWinners.map((winner) => ({
         number: winner.number,
         name: winner.name,
         confirmed: false,
-      };
+        id: winner.id,
+      }));
+
+      prize.winner = newWinnersData[0] || null;
+      prize.winners = newWinnersData;
       prize.announced = true;
 
-      winner.isWinner = {
-        rank: prize.rank,
-        prize: prize.title,
-        announcedAt: Date.now(),
-      };
-      winner.presenceConfirmed = false;
+      chosenWinners.forEach((winner) => {
+        winner.isWinner = {
+          rank: prize.rank,
+          prize: prize.title,
+          announcedAt: now,
+        };
+        winner.presenceConfirmed = false;
+      });
 
       drawState = {
         currentRank: data.rank,
         phase: 'ANNOUNCED',
-        callTimer: null,
-        currentWinner: {
-          rank: prize.rank,
-          prize: prize.title,
-          winnerNumber: winner.number,
-          winnerName: winner.name,
-          announcedAt: Date.now(),
-          confirmed: false,
-        },
+        batchCount: chosenWinners.length,
+        callTimer: 30,
+        currentWinner: announcedWinners[0] || null,
+        currentWinners: announcedWinners,
       };
 
       io.emit('draw_announced', drawState.currentWinner);
       io.emit('state_sync', getAppState());
 
       // Firebase & 로컬 영구 로그 저장
-      await logDrawResultToDb({
-        rank: prize.rank,
-        prize: prize.title,
-        winnerNumber: winner.number,
-        winnerName: winner.name,
-        type: 'WINNER',
-      });
+      for (const w of announcedWinners) {
+        await logDrawResultToDb({
+          rank: prize.rank,
+          prize: prize.title,
+          winnerNumber: w.winnerNumber,
+          winnerName: w.winnerName,
+          type: 'WINNER',
+        });
+      }
       await saveEventStateToDb(getAppState());
     });
 

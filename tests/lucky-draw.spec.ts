@@ -143,4 +143,65 @@ test.describe('럭키드로우 전체 E2E 실시간 시나리오 테스트', () 
     await displayContext.close();
   });
 
+  test('한번에 여러명 일괄 롤링 및 동시 발표(다중 당첨) 플로우 검증', async ({ browser }) => {
+    const adminContext = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+    const adminPage = await adminContext.newPage();
+    const displayContext = await browser.newContext({ viewport: { width: 1920, height: 1080 } });
+    const displayPage = await displayContext.newPage();
+
+    // 1. 어드민 페이지 접근 및 PIN 해제
+    await adminPage.goto('/admin');
+    const pinTitle = adminPage.locator('text=관리자 인증');
+    if (await pinTitle.isVisible({ timeout: 3000 }).catch(() => false)) {
+      const btn7 = adminPage.locator('button:has-text("7")');
+      await btn7.click();
+      await btn7.click();
+      await btn7.click();
+      await btn7.click();
+    }
+    await expect(adminPage.locator('h1:has-text("MANAGEMENT")')).toBeVisible({ timeout: 10000 });
+
+    // 2. 더미 참가자 10명 생성
+    const addDummiesBtn = adminPage.locator('button:has-text("+10명")');
+    await addDummiesBtn.click();
+    await expect(adminPage.locator('text=PLAYERS')).toBeVisible();
+
+    // 3. 전광판(/display) 페이지 열기
+    await displayPage.goto('/display');
+    await expect(displayPage.locator('text=PLAYERS')).toBeVisible({ timeout: 10000 });
+
+    // 4. 5등 상품에서 '3' 프리셋 버튼을 눌러 3명 일괄 추첨 설정
+    const btn3Count = adminPage.locator('button[data-testid="batch-preset-3"]').first();
+    await btn3Count.click();
+    await expect(adminPage.locator('button:has-text("3명 롤링")').first()).toBeVisible({ timeout: 5000 });
+
+    // 5. 3명 동시 롤링 시작
+    const batchRollBtn = adminPage.locator('button:has-text("3명 롤링")').first();
+    await batchRollBtn.click();
+
+    // 전광판에 3개 슬롯 머신 또는 롤링 중 텍스트 동기화 검증
+    await expect(displayPage.locator('text=3명 일괄 롤링 중')).toBeVisible({ timeout: 10000 });
+    await expect(displayPage.locator('text=SLOT #1')).toBeVisible();
+    await expect(displayPage.locator('text=SLOT #2')).toBeVisible();
+    await expect(displayPage.locator('text=SLOT #3')).toBeVisible();
+
+    // 6. 3명 동시 일괄 발표
+    const batchAnnounceBtn = adminPage.locator('button:has-text("3명 발표")').first();
+    await batchAnnounceBtn.click();
+
+    // 전광판에 3명 동시 당첨자 그리드 카드 표시 검증
+    await expect(displayPage.locator('text=총 3명 동시 당첨 발표')).toBeVisible({ timeout: 10000 });
+    await expect(displayPage.locator('text=WINNER #1')).toBeVisible();
+    await expect(displayPage.locator('text=WINNER #2')).toBeVisible();
+    await expect(displayPage.locator('text=WINNER #3')).toBeVisible();
+
+    // 어드민 콘솔에 3명 당첨 완료 상태 표시 검증
+    await expect(adminPage.locator('text=총 3명 일괄 당첨 완료')).toBeVisible({ timeout: 10000 });
+
+    // 리소스 정리
+    await adminContext.close();
+    await displayContext.close();
+  });
+
 });
+

@@ -9,9 +9,12 @@ interface AdminDrawTabProps {
   currentDraw?: DrawState | null;
   manualNumberInput: string;
   onSetManualNumberInput: (val: string) => void;
-  onStartDraw: (rank: number) => void;
-  onAnnounceWinner: (rank: number) => void;
+  onStartDraw: (rank: number, count?: number) => void;
+  onAnnounceWinner: (rank: number, count?: number) => void;
   onRedrawAbsent: (rank: number) => void;
+  onRedrawSpecificAbsent?: (rank: number, absentNumber: number) => void;
+  batchCounts?: Record<number, number>;
+  onSetBatchCount?: (rank: number, count: number) => void;
   onStartTimer: (seconds: number) => void;
   participants: Participant[];
   searchQuery: string;
@@ -26,6 +29,9 @@ export const AdminDrawTab: React.FC<AdminDrawTabProps> = ({
   onStartDraw,
   onAnnounceWinner,
   onRedrawAbsent,
+  onRedrawSpecificAbsent,
+  batchCounts,
+  onSetBatchCount,
   onStartTimer,
   participants,
   searchQuery,
@@ -45,20 +51,27 @@ export const AdminDrawTab: React.FC<AdminDrawTabProps> = ({
       <div className="lg:col-span-7 space-y-4">
         <div className="p-5 rounded-2xl bg-white border border-zinc-200 shadow-sm space-y-4">
           <div className="flex items-center justify-between pb-3 border-b border-zinc-100">
-            <h2 className="text-xs font-bold text-zinc-800 uppercase tracking-wider flex items-center gap-1.5">
-              <Dice5 className="w-4 h-4" /> 단계별 추첨 & 현장 부재자 처리
-            </h2>
-            <span className="text-[11px] text-zinc-400 font-sans">
+            <div>
+              <h2 className="text-xs font-bold text-zinc-800 uppercase tracking-wider flex items-center gap-1.5">
+                <Dice5 className="w-4 h-4" /> 단계별 추첨 & 일괄 추첨 제어
+              </h2>
+              <span className="text-[11px] text-zinc-400 font-sans">
+                인원수를 설정하여 1번에 여러 명을 동시 롤링 및 발표할 수 있습니다.
+              </span>
+            </div>
+            <span className="text-[11px] text-zinc-400 font-sans hidden sm:inline">
               5등부터 차례대로 발표
             </span>
           </div>
 
-          <div className="space-y-2.5">
+          <div className="space-y-3">
             {sortedPrizes.map((prize) => {
-              const isWon = Boolean(prize.winner);
+              const hasMultipleWinners = Boolean(prize.winners && prize.winners.length > 1);
+              const isWon = Boolean(prize.winner || (prize.winners && prize.winners.length > 0));
               const isCurrent = currentDraw?.currentRank === prize.rank;
               const isRoulette = isCurrent && currentDraw?.phase === 'ROULETTE';
               const absentCount = prize.absentHistory?.length || 0;
+              const currentBatchCount = batchCounts?.[prize.rank] || prize.count || 1;
 
               return (
                 <div
@@ -77,8 +90,17 @@ export const AdminDrawTab: React.FC<AdminDrawTabProps> = ({
                         {prize.rank}등
                       </span>
                       <div>
-                        <h4 className="text-xs font-bold text-zinc-900">{prize.title}</h4>
-                        {isWon && prize.winner ? (
+                        <div className="flex items-center gap-2">
+                          <h4 className="text-xs font-bold text-zinc-900">{prize.title}</h4>
+                          {!isWon && (
+                            <span className="text-[10px] px-1.5 py-0.2 rounded bg-zinc-100 text-zinc-600 font-semibold">
+                              {currentBatchCount}명 추첨
+                            </span>
+                          )}
+                        </div>
+
+                        {/* 단일 당첨자일 때 요약 표시 */}
+                        {isWon && !hasMultipleWinners && prize.winner && (
                           <div className="flex items-center gap-2 mt-0.5 text-xs">
                             <span className="font-bold text-zinc-800 font-mono">
                               당첨: #{String(prize.winner.number).padStart(3, '0')} ({prize.winner.name})
@@ -93,17 +115,59 @@ export const AdminDrawTab: React.FC<AdminDrawTabProps> = ({
                               </span>
                             )}
                           </div>
-                        ) : (
+                        )}
+
+                        {!isWon && (
                           <p className="text-[11px] text-zinc-400 font-sans">추첨 대기</p>
                         )}
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex flex-wrap items-center gap-1.5">
                       {!isWon ? (
                         <>
+                          {/* 추첨 인원수 조절 스텝퍼 및 퀵 버튼 */}
+                          {onSetBatchCount && (
+                            <div className="flex items-center gap-1 mr-1 bg-zinc-100 p-1 rounded-lg">
+                              <button
+                                onClick={() => onSetBatchCount(prize.rank, Math.max(1, currentBatchCount - 1))}
+                                className="w-5 h-5 rounded bg-white text-zinc-700 text-xs font-bold flex items-center justify-center hover:bg-zinc-200"
+                                title="1명 감소"
+                              >
+                                -
+                              </button>
+                              <span className="text-xs font-bold px-1 text-zinc-800 font-mono">
+                                {currentBatchCount}명
+                              </span>
+                              <button
+                                onClick={() => onSetBatchCount(prize.rank, currentBatchCount + 1)}
+                                className="w-5 h-5 rounded bg-white text-zinc-700 text-xs font-bold flex items-center justify-center hover:bg-zinc-200"
+                                title="1명 증가"
+                              >
+                                +
+                              </button>
+                              <div className="flex gap-0.5 ml-1 border-l border-zinc-200 pl-1">
+                                {[1, 2, 3, 5].map((cnt) => (
+                                  <button
+                                    key={cnt}
+                                    data-testid={`batch-preset-${cnt}`}
+                                    aria-label={`${cnt}명 설정`}
+                                    onClick={() => onSetBatchCount(prize.rank, cnt)}
+                                    className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                      currentBatchCount === cnt
+                                        ? 'bg-zinc-900 text-white'
+                                        : 'bg-white text-zinc-600 hover:bg-zinc-200'
+                                    }`}
+                                  >
+                                    {cnt}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
                           <button
-                            onClick={() => onStartDraw(prize.rank)}
+                            onClick={() => onStartDraw(prize.rank, currentBatchCount)}
                             disabled={isRoulette}
                             className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 ${
                               isRoulette
@@ -112,17 +176,24 @@ export const AdminDrawTab: React.FC<AdminDrawTabProps> = ({
                             }`}
                           >
                             <Play className="w-3 h-3" />
-                            {isRoulette ? '롤링 중' : '1. 롤링'}
+                            {isRoulette
+                              ? currentBatchCount > 1
+                                ? `${currentBatchCount}명 롤링 중`
+                                : '롤링 중'
+                              : currentBatchCount > 1
+                              ? `${currentBatchCount}명 롤링`
+                              : '1. 롤링'}
                           </button>
 
                           <button
-                            onClick={() => onAnnounceWinner(prize.rank)}
+                            onClick={() => onAnnounceWinner(prize.rank, currentBatchCount)}
                             className="px-3 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-bold transition flex items-center gap-1 shadow-sm"
                           >
-                            <Sparkles className="w-3 h-3" /> 2. 발표
+                            <Sparkles className="w-3 h-3" />
+                            {currentBatchCount > 1 ? `${currentBatchCount}명 발표` : '2. 발표'}
                           </button>
                         </>
-                      ) : (
+                      ) : !hasMultipleWinners ? (
                         <>
                           <button
                             onClick={() => onRedrawAbsent(prize.rank)}
@@ -139,9 +210,59 @@ export const AdminDrawTab: React.FC<AdminDrawTabProps> = ({
                             <Clock className="w-3 h-3 text-red-500" /> 30s
                           </button>
                         </>
-                      )}
+                      ) : null}
                     </div>
                   </div>
+
+                  {/* 다중 당첨자 목록 및 개별 출석 확인 / 재추첨 컨트롤 */}
+                  {isWon && hasMultipleWinners && prize.winners && (
+                    <div className="mt-3 pt-3 border-t border-zinc-200/80 space-y-2">
+                      <div className="flex items-center justify-between text-[11px] font-bold text-zinc-700">
+                        <span>🎉 총 {prize.winners.length}명 일괄 당첨 완료</span>
+                        <button
+                          onClick={() => onStartTimer(30)}
+                          className="px-2 py-1 rounded bg-zinc-100 hover:bg-zinc-200 text-[11px] font-bold text-zinc-700 transition flex items-center gap-1"
+                        >
+                          <Clock className="w-3 h-3 text-red-500" /> 30s 호명 타이머
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {prize.winners.map((w) => (
+                          <div
+                            key={w.number}
+                            className="flex items-center justify-between p-2 rounded-lg bg-white border border-zinc-200 shadow-xs text-xs"
+                          >
+                            <div className="flex items-center gap-2 truncate">
+                              <span className="font-black font-mono text-zinc-900">
+                                #{String(w.number).padStart(3, '0')}
+                              </span>
+                              <span className="font-semibold text-zinc-800 truncate">{w.name}</span>
+                              {w.confirmed ? (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                                  출석확인됨
+                                </span>
+                              ) : (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200 animate-pulse">
+                                  출석대기
+                                </span>
+                              )}
+                            </div>
+
+                            {onRedrawSpecificAbsent && (
+                              <button
+                                onClick={() => onRedrawSpecificAbsent(prize.rank, w.number)}
+                                className="ml-2 px-2 py-1 rounded bg-red-50 hover:bg-red-100 text-red-600 text-[10px] font-bold border border-red-200 transition shrink-0"
+                                title="해당 당첨자 부재 시 실격 처리하고 1명 재추첨"
+                              >
+                                부재 재추첨
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   {absentCount > 0 && (
                     <div className="mt-2 pt-1.5 border-t border-zinc-200/60 text-[10px] text-red-600">

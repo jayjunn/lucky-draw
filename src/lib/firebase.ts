@@ -215,6 +215,9 @@ export async function confirmPresenceDirect(participantId: string): Promise<void
     if (!snap.exists()) return;
 
     const data = snap.data() as AppState;
+    const targetParticipant = (data.participants || []).find((p) => p.id === participantId);
+    const targetNumber = targetParticipant?.number;
+
     const updatedParticipants = (data.participants || []).map((p) => {
       if (p.id === participantId) {
         return { ...p, presenceConfirmed: true };
@@ -222,19 +225,48 @@ export async function confirmPresenceDirect(participantId: string): Promise<void
       return p;
     });
 
-    const targetParticipant = (data.participants || []).find((p) => p.id === participantId);
-    const targetNumber = targetParticipant?.number;
-
     let updatedDrawState = { ...data.drawState };
     if (updatedDrawState.currentWinner) {
-      updatedDrawState.currentWinner.confirmed = true;
+      if (
+        updatedDrawState.currentWinner.participantId === participantId ||
+        updatedDrawState.currentWinner.winnerNumber === targetNumber
+      ) {
+        updatedDrawState.currentWinner = { ...updatedDrawState.currentWinner, confirmed: true };
+      }
+    }
+    if (updatedDrawState.currentWinners) {
+      updatedDrawState.currentWinners = updatedDrawState.currentWinners.map((w) => {
+        if (w.participantId === participantId || w.winnerNumber === targetNumber) {
+          return { ...w, confirmed: true };
+        }
+        return w;
+      });
     }
 
     const updatedPrizes = (data.prizes || []).map((prize) => {
-      if (prize.winner && (prize.winner.number === targetNumber || (updatedDrawState.currentWinner && prize.rank === updatedDrawState.currentWinner.rank))) {
+      let isTargetPrize = false;
+      const updatedWinners = (prize.winners || []).map((w) => {
+        if (w.number === targetNumber || w.id === participantId) {
+          isTargetPrize = true;
+          return { ...w, confirmed: true };
+        }
+        return w;
+      });
+
+      let updatedWinner = prize.winner;
+      if (
+        prize.winner &&
+        (prize.winner.number === targetNumber ||
+          (updatedDrawState.currentWinner && prize.rank === updatedDrawState.currentWinner.rank))
+      ) {
+        updatedWinner = { ...prize.winner, confirmed: true };
+      }
+
+      if (isTargetPrize || (updatedWinner && updatedWinner.confirmed !== prize.winner?.confirmed)) {
         return {
           ...prize,
-          winner: { ...prize.winner, confirmed: true },
+          winner: updatedWinner,
+          winners: updatedWinners.length > 0 ? updatedWinners : (updatedWinner ? [updatedWinner] : []),
         };
       }
       return prize;
@@ -249,27 +281,33 @@ export async function confirmPresenceDirect(participantId: string): Promise<void
   });
 }
 
-// 4. 어드민 추첨 롤링 시작
-export async function startRouletteDirect(rank: number): Promise<void> {
+// 4. 어드민 추첨 롤링 시작 (일괄 추첨 인원수 batchCount 지원)
+export async function startRouletteDirect(rank: number, batchCount: number = 1): Promise<void> {
   const firestore = getFirebaseDb();
   const eventRef = doc(firestore, EVENT_DOC_PATH[0], EVENT_DOC_PATH[1]);
   await updateDoc(eventRef, {
     drawState: {
       currentRank: rank,
       phase: 'ROULETTE',
+      batchCount: Math.max(1, batchCount),
       currentWinner: null,
+      currentWinners: [],
       callTimer: null,
     },
     updatedAt: serverTimestamp(),
   });
 }
 
-// 5. 어드민 당첨자 발표 (Atomic Transaction)
-export async function announceWinnerDirect(rank: number, targetNumber?: number): Promise<void> {
+// 5. 어드민 당첨자 발표 (일괄 추첨/다중 당첨 지원 Atomic Transaction)
+export async function announceWinnerDirect(
+  rank: number,
+  targetNumber?: number,
+  count: number = 1
+): Promise<void> {
   const firestore = getFirebaseDb();
   const eventRef = doc(firestore, EVENT_DOC_PATH[0], EVENT_DOC_PATH[1]);
 
-  let winnerInfo: any = null;
+  let announcedWinnersList: any[] = [];
 
   await runTransaction(firestore, async (transaction) => {
     const snap = await transaction.get(eventRef);
@@ -279,9 +317,17 @@ export async function announceWinnerDirect(rank: number, targetNumber?: number):
     const prize = data.prizes.find((p) => p.rank === rank);
     if (!prize) return;
 
-    const wonNumbers = new Set(
-      data.prizes.filter((p) => p.winner && p.rank !== rank).map((p) => p.winner!.number)
-    );
+    const targetCount = Math.max(1, count || prize.count || 1);
+
+    // 이미 당첨된 번호들 수집 (다른 등수)
+    const wonNumbers = new Set<number>();
+    data.prizes.forEach((p) => {
+      if (p.rank !== rank) {
+        if (p.winner) wonNumbers.add(p.winner.number);
+        if (p.winners) p.winners.forEach((w) => wonNumbers.add(w.number));
+      }
+    });
+
     const absentNumbers = new Set(
       data.participants.filter((p) => p.status === 'ABSENT').map((p) => p.number)
     );
@@ -292,41 +338,67 @@ export async function announceWinnerDirect(rank: number, targetNumber?: number):
       return true;
     });
 
-    if (targetNumber) {
-      const specified = candidates.find((p) => p.number === targetNumber);
-      if (specified) candidates = [specified];
-    }
-
     if (candidates.length === 0) {
       throw new Error('추첨 가능한 참가자가 없습니다.');
     }
 
-    const winner = candidates[Math.floor(Math.random() * candidates.length)];
-    winnerInfo = {
+    const chosenParticipants: Participant[] = [];
+    if (targetNumber) {
+      const specified = candidates.find((p) => p.number === targetNumber);
+      if (specified) {
+        chosenParticipants.push(specified);
+        candidates = candidates.filter((p) => p.number !== targetNumber);
+      }
+    }
+
+    // 남은 인원수만큼 무작위 셔플 후 선발
+    const needCount = targetCount - chosenParticipants.length;
+    if (needCount > 0) {
+      const shuffled = [...candidates].sort(() => 0.5 - Math.random());
+      const picked = shuffled.slice(0, needCount);
+      chosenParticipants.push(...picked);
+    }
+
+    if (chosenParticipants.length === 0) {
+      throw new Error('추첨 가능한 참가자가 없습니다.');
+    }
+
+    const now = Date.now();
+    announcedWinnersList = chosenParticipants.map((p) => ({
       rank,
       prize: prize.title,
-      winnerNumber: winner.number,
-      winnerName: winner.name,
-      announcedAt: Date.now(),
+      winnerNumber: p.number,
+      winnerName: p.name,
+      announcedAt: now,
       confirmed: false,
-    };
+      participantId: p.id,
+    }));
+
+    const newWinnersData = chosenParticipants.map((p) => ({
+      number: p.number,
+      name: p.name,
+      confirmed: false,
+      id: p.id,
+    }));
 
     const updatedPrizes = data.prizes.map((p) => {
       if (p.rank === rank) {
         return {
           ...p,
-          winner: { number: winner.number, name: winner.name, confirmed: false },
+          winner: newWinnersData[0] || null,
+          winners: newWinnersData,
           announced: true,
         };
       }
       return p;
     });
 
+    const chosenIds = new Set(chosenParticipants.map((p) => p.id));
     const updatedParticipants = data.participants.map((p) => {
-      if (p.id === winner.id) {
+      if (chosenIds.has(p.id)) {
         return {
           ...p,
-          isWinner: { rank, prize: prize.title, announcedAt: Date.now() },
+          isWinner: { rank, prize: prize.title, announcedAt: now },
           presenceConfirmed: false,
         };
       }
@@ -339,7 +411,9 @@ export async function announceWinnerDirect(rank: number, targetNumber?: number):
       drawState: {
         currentRank: rank,
         phase: 'ANNOUNCED',
-        currentWinner: winnerInfo,
+        batchCount: chosenParticipants.length,
+        currentWinner: announcedWinnersList[0] || null,
+        currentWinners: announcedWinnersList,
         callTimer: 30,
       },
       updatedAt: serverTimestamp(),
@@ -347,68 +421,152 @@ export async function announceWinnerDirect(rank: number, targetNumber?: number):
   });
 
   // 당첨 로그 추가 (비동기)
-  if (winnerInfo) {
-    await addDoc(collection(firestore, EVENT_DOC_PATH[0], EVENT_DOC_PATH[1], 'draw_logs'), {
-      ...winnerInfo,
-      type: 'WINNER',
-      createdAt: new Date().toISOString(),
-      formattedDate: new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }),
-      timestamp: serverTimestamp(),
-    });
+  if (announcedWinnersList.length > 0) {
+    const logsCol = collection(firestore, EVENT_DOC_PATH[0], EVENT_DOC_PATH[1], 'draw_logs');
+    for (const winInfo of announcedWinnersList) {
+      await addDoc(logsCol, {
+        ...winInfo,
+        type: 'WINNER',
+        createdAt: new Date().toISOString(),
+        formattedDate: new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }),
+        timestamp: serverTimestamp(),
+      });
+    }
   }
 }
 
-// 6. 부재자 실격 및 재추첨
-export async function redrawAbsentDirect(rank: number): Promise<void> {
+// 6-1. 특정 부재자 실격 및 1명 대체 재추첨
+export async function redrawSpecificAbsentDirect(rank: number, absentNumber: number): Promise<void> {
   const firestore = getFirebaseDb();
   const eventRef = doc(firestore, EVENT_DOC_PATH[0], EVENT_DOC_PATH[1]);
-  const snap = await getDoc(eventRef);
-  if (!snap.exists()) return;
 
-  const data = snap.data() as AppState;
-  const currentWinner = data.drawState.currentWinner;
-  if (!currentWinner) return;
+  let replacedWinner: any = null;
+  let absentName = '';
+  let prizeTitle = '';
 
-  const absentNumber = currentWinner.winnerNumber;
-  const absentName = currentWinner.winnerName;
+  await runTransaction(firestore, async (transaction) => {
+    const snap = await transaction.get(eventRef);
+    if (!snap.exists()) return;
 
-  // 부재자 실격 처리
-  const updatedParticipants = data.participants.map((p) => {
-    if (p.number === absentNumber) {
-      return { ...p, status: 'ABSENT' as const, isWinner: undefined };
-    }
-    return p;
-  });
+    const data = snap.data() as AppState;
+    const prize = data.prizes.find((p) => p.rank === rank);
+    if (!prize) return;
+    prizeTitle = prize.title;
 
-  const updatedPrizes = data.prizes.map((p) => {
-    if (p.rank === rank) {
-      const history = p.absentHistory || [];
-      return {
-        ...p,
-        winner: null,
-        announced: false,
-        absentHistory: [...history, { number: absentNumber, name: absentName, at: Date.now() }],
+    const currentWinners = prize.winners && prize.winners.length > 0 ? prize.winners : (prize.winner ? [prize.winner] : []);
+    const targetAbsent = currentWinners.find((w) => w.number === absentNumber);
+    if (!targetAbsent) return;
+    absentName = targetAbsent.name;
+
+    // 참가자 실격 처리
+    const updatedParticipants = data.participants.map((p) => {
+      if (p.number === absentNumber) {
+        return { ...p, status: 'ABSENT' as const, isWinner: undefined, presenceConfirmed: false };
+      }
+      return p;
+    });
+
+    // 재추첨 가능한 후보 선발
+    const wonNumbers = new Set<number>();
+    data.prizes.forEach((p) => {
+      if (p.winner) wonNumbers.add(p.winner.number);
+      if (p.winners) p.winners.forEach((w) => wonNumbers.add(w.number));
+    });
+    // 현재 실격자 번호는 제외
+    wonNumbers.delete(absentNumber);
+
+    const absentNumbers = new Set(
+      updatedParticipants.filter((p) => p.status === 'ABSENT').map((p) => p.number)
+    );
+
+    const candidates = updatedParticipants.filter((p) => {
+      if (absentNumbers.has(p.number)) return false;
+      if (!data.allowDuplicateWin && wonNumbers.has(p.number)) return false;
+      return true;
+    });
+
+    const now = Date.now();
+    let updatedWinnersList = [...currentWinners];
+    let newParticipantWinner: Participant | null = null;
+
+    if (candidates.length > 0) {
+      newParticipantWinner = candidates[Math.floor(Math.random() * candidates.length)];
+      replacedWinner = {
+        rank,
+        prize: prize.title,
+        winnerNumber: newParticipantWinner.number,
+        winnerName: newParticipantWinner.name,
+        announcedAt: now,
+        confirmed: false,
+        participantId: newParticipantWinner.id,
       };
-    }
-    return p;
-  });
 
-  await updateDoc(eventRef, {
-    participants: updatedParticipants,
-    prizes: updatedPrizes,
-    drawState: {
-      currentRank: rank,
-      phase: 'IDLE',
-      currentWinner: null,
-      callTimer: null,
-    },
-    updatedAt: serverTimestamp(),
+      updatedWinnersList = updatedWinnersList.map((w) => {
+        if (w.number === absentNumber) {
+          return {
+            number: newParticipantWinner!.number,
+            name: newParticipantWinner!.name,
+            confirmed: false,
+            id: newParticipantWinner!.id,
+          };
+        }
+        return w;
+      });
+
+      // 새 당첨자 상태 업데이트
+      const pIdx = updatedParticipants.findIndex((p) => p.id === newParticipantWinner!.id);
+      if (pIdx !== -1) {
+        updatedParticipants[pIdx] = {
+          ...updatedParticipants[pIdx],
+          isWinner: { rank, prize: prize.title, announcedAt: now },
+          presenceConfirmed: false,
+        };
+      }
+    } else {
+      // 대체할 사람이 없으면 해당 당첨자 제거
+      updatedWinnersList = updatedWinnersList.filter((w) => w.number !== absentNumber);
+    }
+
+    const history = prize.absentHistory || [];
+    const updatedHistory = [...history, { number: absentNumber, name: absentName, at: now }];
+
+    const updatedPrizes = data.prizes.map((p) => {
+      if (p.rank === rank) {
+        return {
+          ...p,
+          winner: updatedWinnersList[0] || null,
+          winners: updatedWinnersList,
+          announced: updatedWinnersList.length > 0,
+          absentHistory: updatedHistory,
+        };
+      }
+      return p;
+    });
+
+    const newAnnouncedWinners = (data.drawState.currentWinners || []).map((w) => {
+      if (w.winnerNumber === absentNumber && replacedWinner) {
+        return replacedWinner;
+      }
+      return w;
+    }).filter((w) => w.winnerNumber !== absentNumber || replacedWinner);
+
+    transaction.update(eventRef, {
+      participants: updatedParticipants,
+      prizes: updatedPrizes,
+      drawState: {
+        ...data.drawState,
+        currentWinner: newAnnouncedWinners[0] || null,
+        currentWinners: newAnnouncedWinners,
+        callTimer: 30,
+      },
+      updatedAt: serverTimestamp(),
+    });
   });
 
   // 부재 로그 기록
   await addDoc(collection(firestore, EVENT_DOC_PATH[0], EVENT_DOC_PATH[1], 'draw_logs'), {
     rank,
-    prize: currentWinner.prize,
+    prize: prizeTitle,
     winnerNumber: absentNumber,
     winnerName: absentName,
     type: 'ABSENT_CANCELLED',
@@ -417,6 +575,22 @@ export async function redrawAbsentDirect(rank: number): Promise<void> {
     formattedDate: new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }),
     timestamp: serverTimestamp(),
   });
+}
+
+// 6-2. 기존 단일 부재자 실격 및 재추첨 (하위 호환)
+export async function redrawAbsentDirect(rank: number): Promise<void> {
+  const firestore = getFirebaseDb();
+  const eventRef = doc(firestore, EVENT_DOC_PATH[0], EVENT_DOC_PATH[1]);
+  const snap = await getDoc(eventRef);
+  if (!snap.exists()) return;
+
+  const data = snap.data() as AppState;
+  const prize = data.prizes.find((p) => p.rank === rank);
+  const targetWinner = prize?.winner || data.drawState.currentWinner;
+  if (!targetWinner) return;
+
+  const absentNumber = 'winnerNumber' in targetWinner ? targetWinner.winnerNumber : targetWinner.number;
+  await redrawSpecificAbsentDirect(rank, absentNumber);
 }
 
 // 7. 실시간 리액션 전송 (박수/불꽃 등)

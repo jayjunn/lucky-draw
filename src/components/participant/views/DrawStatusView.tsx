@@ -36,7 +36,9 @@ export const DrawStatusView: React.FC<DrawStatusViewProps> = ({
               className="w-2 h-2 rounded-full animate-ping"
               style={{ backgroundColor: themeCfg.accent }}
             />
-            <span>[{currentDraw?.currentRank}등] 추첨 롤링 중</span>
+            <span>
+              [{currentDraw?.currentRank}등] {currentDraw?.batchCount && currentDraw.batchCount > 1 ? `${currentDraw.batchCount}명 일괄 추첨 롤링 중` : '추첨 롤링 중'}
+            </span>
           </div>
           <div className="text-3xl font-black font-mono tracking-widest text-white">
             #{String(rollingNumber).padStart(3, '0')}
@@ -53,7 +55,7 @@ export const DrawStatusView: React.FC<DrawStatusViewProps> = ({
               <Sparkles className="w-4 h-4" /> 당첨을 축하합니다!
             </div>
             <div className="text-base font-extrabold text-white">
-              [{currentDraw?.currentWinner?.rank}등] {currentDraw?.currentWinner?.prize}
+              [{currentDraw?.currentWinner?.rank || participant.isWinner?.rank}등] {currentDraw?.currentWinner?.prize || participant.isWinner?.prize}
             </div>
 
             {!participant.presenceConfirmed ? (
@@ -74,11 +76,26 @@ export const DrawStatusView: React.FC<DrawStatusViewProps> = ({
           /* 3. 다른 사람 당첨 시 */
           <div className="space-y-1.5">
             <div className="text-[11px] font-bold text-zinc-400">
-              [{currentDraw?.currentWinner?.rank}등] 발표 완료
+              [{currentDraw?.currentRank}등] {currentDraw?.currentWinners && currentDraw.currentWinners.length > 1 ? `총 ${currentDraw.currentWinners.length}명 발표 완료` : '발표 완료'}
             </div>
-            <div className="text-sm font-extrabold text-white">
-              당첨: #{String(currentDraw?.currentWinner?.winnerNumber).padStart(3, '0')} ({currentDraw?.currentWinner?.winnerName})
-            </div>
+
+            {currentDraw?.currentWinners && currentDraw.currentWinners.length > 1 ? (
+              <div className="flex flex-wrap justify-center gap-1.5 my-2 max-h-28 overflow-y-auto p-1">
+                {currentDraw.currentWinners.map((w) => (
+                  <span
+                    key={w.winnerNumber}
+                    className="px-2 py-1 rounded-lg bg-white/10 text-white font-mono text-xs font-bold"
+                  >
+                    #{String(w.winnerNumber).padStart(3, '0')} {w.winnerName}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <div className="text-sm font-extrabold text-white">
+                당첨: #{String(currentDraw?.currentWinner?.winnerNumber).padStart(3, '0')} ({currentDraw?.currentWinner?.winnerName})
+              </div>
+            )}
+
             <p className="text-[11px] text-zinc-400">
               상품: {currentDraw?.currentWinner?.prize}
             </p>

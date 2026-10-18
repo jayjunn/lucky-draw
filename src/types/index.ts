@@ -12,17 +12,21 @@ export interface Participant {
   };
 }
 
+export interface WinnerInfo {
+  number: number;
+  name: string;
+  confirmed?: boolean;
+  id?: string;
+}
+
 export interface Prize {
   id: string;
   rank: number; // 5등, 4등, 3등, 2등, 1등 등
   title: string; // 상품명
   description?: string;
   count: number;
-  winner?: {
-    number: number;
-    name: string;
-    confirmed?: boolean;
-  } | null;
+  winner?: WinnerInfo | null;
+  winners?: WinnerInfo[]; // 일괄 추첨 다중 당첨자 목록
   announced: boolean;
   absentHistory?: {
     number: number;
@@ -33,19 +37,25 @@ export interface Prize {
 
 export type DrawPhase = 'IDLE' | 'ROULETTE' | 'ANNOUNCED';
 
+export interface AnnouncedWinner {
+  rank: number;
+  prize: string;
+  winnerNumber: number;
+  winnerName: string;
+  announcedAt: number;
+  confirmed?: boolean;
+  participantId?: string;
+}
+
 export interface DrawState {
   currentRank: number | null;
   phase: DrawPhase;
   candidateNumber?: number;
+  candidateNumbers?: number[];
+  batchCount?: number;
   callTimer?: number | null; // 호명 카운트다운 초
-  currentWinner?: {
-    rank: number;
-    prize: string;
-    winnerNumber: number;
-    winnerName: string;
-    announcedAt: number;
-    confirmed?: boolean;
-  } | null;
+  currentWinner?: AnnouncedWinner | null;
+  currentWinners?: AnnouncedWinner[]; // 일괄 추첨 발표된 당첨자 전체 목록
 }
 
 export type ThemeType = 'HALLOWEEN' | 'MONO' | 'CYBER' | 'GOLD';

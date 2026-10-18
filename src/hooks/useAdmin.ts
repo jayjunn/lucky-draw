@@ -6,6 +6,7 @@ import {
   startRouletteDirect, 
   announceWinnerDirect, 
   redrawAbsentDirect, 
+  redrawSpecificAbsentDirect,
   setThemeDirect, 
   resetAllDirect,
   getFirebaseDb 
@@ -73,31 +74,54 @@ export function useAdmin() {
     };
   }, [eventNameInput]);
 
+  const [batchCounts, setBatchCounts] = useState<Record<number, number>>({});
+
+  const setBatchCountForRank = (rank: number, count: number) => {
+    setBatchCounts((prev) => ({
+      ...prev,
+      [rank]: Math.max(1, count),
+    }));
+  };
+
   // 추첨 시작 (롤링)
-  const handleStartDraw = async (rank: number) => {
+  const handleStartDraw = async (rank: number, count?: number) => {
+    const drawCount = count || batchCounts[rank] || 1;
     try {
-      await startRouletteDirect(rank);
+      await startRouletteDirect(rank, drawCount);
     } catch (e) {
       console.warn(e);
     }
     const socket = getSocket();
-    socket.emit('admin_start_draw', { rank });
+    socket.emit('admin_start_draw', { rank, count: drawCount });
   };
 
   // 당첨자 발표
-  const handleAnnounceWinner = async (rank: number) => {
+  const handleAnnounceWinner = async (rank: number, count?: number) => {
     const targetNumber = manualNumberInput ? parseInt(manualNumberInput, 10) : undefined;
+    const drawCount = count || batchCounts[rank] || 1;
     try {
-      await announceWinnerDirect(rank, targetNumber);
+      await announceWinnerDirect(rank, targetNumber, drawCount);
     } catch (e: any) {
       alert(e.message || '추첨 에러가 발생했습니다.');
     }
     const socket = getSocket();
-    socket.emit('admin_announce_winner', { rank, targetNumber });
+    socket.emit('admin_announce_winner', { rank, targetNumber, count: drawCount });
     setManualNumberInput('');
   };
 
-  // 부재자 실격 및 재추첨
+  // 특정 부재자 실격 및 재추첨
+  const handleRedrawSpecificAbsent = async (rank: number, absentNumber: number) => {
+    if (!confirm(`당첨자 #${String(absentNumber).padStart(3, '0')} 님이 자리에 없습니까? 부재(No-Show)로 실격 처리하고 즉시 1명을 재추첨합니다.`)) return;
+    try {
+      await redrawSpecificAbsentDirect(rank, absentNumber);
+    } catch (e) {
+      console.warn(e);
+    }
+    const socket = getSocket();
+    socket.emit('admin_redraw_absent', { rank, absentNumber });
+  };
+
+  // 부재자 실격 및 재추첨 (기본)
   const handleRedrawAbsent = async (rank: number) => {
     if (!confirm('현재 당첨자가 자리에 없습니까? 부재(No-Show)로 실격 처리하고 즉시 다음 참가자를 뽑습니다.')) return;
     try {
@@ -289,6 +313,9 @@ export function useAdmin() {
     handleStartDraw,
     handleAnnounceWinner,
     handleRedrawAbsent,
+    handleRedrawSpecificAbsent,
+    batchCounts,
+    setBatchCountForRank,
     handleStartTimer,
     handleGenerateDummies,
     handleResetDraws,

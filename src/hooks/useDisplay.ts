@@ -19,6 +19,7 @@ export function useDisplay() {
   const [showQrModal, setShowQrModal] = useState<boolean>(false);
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [rollingNumber, setRollingNumber] = useState<number>(1);
+  const [rollingNumbers, setRollingNumbers] = useState<number[]>([1]);
   const [reactions, setReactions] = useState<FloatingReaction[]>([]);
   const [timerSeconds, setTimerSeconds] = useState<number | null>(null);
   const [presenceAlert, setPresenceAlert] = useState<string | null>(null);
@@ -46,10 +47,15 @@ export function useDisplay() {
     const unsubFirebase = subscribeAppState((state: AppState) => {
       setAppState(state);
       if (state.drawState?.phase === 'ROULETTE') {
+        const batchCount = state.drawState.batchCount || 1;
+        const maxNum = Math.max(state.participants?.length || 0, 99);
+
         if (!rollingIntervalRef.current) {
           soundFX.playDrumRoll(4);
           rollingIntervalRef.current = setInterval(() => {
-            setRollingNumber(Math.floor(Math.random() * 99) + 1);
+            const nextNums = Array.from({ length: batchCount }, () => Math.floor(Math.random() * maxNum) + 1);
+            setRollingNumbers(nextNums);
+            setRollingNumber(nextNums[0]);
             soundFX.playTick();
           }, 55);
         }
@@ -65,15 +71,18 @@ export function useDisplay() {
       setAppState(state);
     });
 
-    socket.on('draw_roulette_start', () => {
+    socket.on('draw_roulette_start', (data?: { batchCount?: number }) => {
       soundFX.playDrumRoll(4);
       setTimerSeconds(null);
       setPresenceAlert(null);
       setCancelAlert(null);
 
+      const count = data?.batchCount || 1;
       if (rollingIntervalRef.current) clearInterval(rollingIntervalRef.current);
       rollingIntervalRef.current = setInterval(() => {
-        setRollingNumber(Math.floor(Math.random() * 99) + 1);
+        const nextNums = Array.from({ length: count }, () => Math.floor(Math.random() * 99) + 1);
+        setRollingNumbers(nextNums);
+        setRollingNumber(nextNums[0]);
         soundFX.playTick();
       }, 55);
     });
@@ -171,6 +180,7 @@ export function useDisplay() {
     toggleSound,
     toggleFullScreen,
     rollingNumber,
+    rollingNumbers,
     reactions,
     timerSeconds,
     presenceAlert,
