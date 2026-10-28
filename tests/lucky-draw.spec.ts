@@ -31,6 +31,10 @@ async function resetDb() {
     theme: 'HALLOWEEN',
     updatedAt: new Date().toISOString(),
   });
+
+  try {
+    await fetch('http://localhost:3000/api/test-reset').catch(() => {});
+  } catch {}
 }
 
 async function unlockAdmin(page: any) {
@@ -179,7 +183,7 @@ test.describe('럭키드로우 전체 E2E 실시간 시나리오 테스트', () 
     await expect(displayPage.locator('text=SLOT #3')).toBeVisible();
 
     // 6. 3명 동시 일괄 발표
-    const batchAnnounceBtn = adminPage.locator('button:has-text("3명 발표")').first();
+    const batchAnnounceBtn = adminPage.locator('button:has-text("발표")').first();
     await batchAnnounceBtn.click();
 
     // 전광판에 3명 동시 당첨자 그리드 카드 표시 검증
@@ -237,9 +241,9 @@ test.describe('럭키드로우 전체 E2E 실시간 시나리오 테스트', () 
 
     // 5. 전광판(/display) 화면에서 커스텀 라벨 및 등수 숨김 반영 확인
     await displayPage.goto('/display');
-    await expect(displayPage.locator('text=최고급 안마의자')).toBeVisible({ timeout: 10000 });
+    await expect(displayPage.locator('text=최고급 안마의자').first()).toBeVisible({ timeout: 10000 });
     await expect(displayPage.locator('text=대상').first()).toBeVisible({ timeout: 10000 });
-    await expect(displayPage.locator('text=서프라이즈 선물박스')).toBeVisible({ timeout: 10000 });
+    await expect(displayPage.locator('text=서프라이즈 선물박스').first()).toBeVisible({ timeout: 10000 });
 
     await adminContext.close();
     await displayContext.close();

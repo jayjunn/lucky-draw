@@ -72,7 +72,7 @@ export const AdminDrawTab: React.FC<AdminDrawTabProps> = ({
               const isCurrent = currentDraw?.currentRank === prize.rank;
               const isRoulette = isCurrent && currentDraw?.phase === 'ROULETTE';
               const absentCount = prize.absentHistory?.length || 0;
-              const currentBatchCount = batchCounts?.[prize.rank] || prize.count || 1;
+              const currentBatchCount = (isCurrent && currentDraw?.batchCount) || batchCounts?.[prize.rank] || prize.count || 1;
               const rankBadge = getRankLabel(prize);
 
               return (

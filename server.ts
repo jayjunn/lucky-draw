@@ -105,6 +105,23 @@ app.prepare().then(() => {
   const server = createServer(async (req, res) => {
     try {
       const parsedUrl = parse(req.url!, true);
+      if (parsedUrl.pathname === '/api/test-reset') {
+        participants = [];
+        nextParticipantNumber = 1;
+        prizes = JSON.parse(JSON.stringify(defaultPrizes));
+        drawState = {
+          currentRank: null,
+          phase: 'IDLE',
+          currentWinner: null,
+          callTimer: null,
+        };
+        if (timerInterval) clearInterval(timerInterval);
+        io.emit('draw_reset', {});
+        io.emit('state_sync', getAppState());
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true }));
+        return;
+      }
       await handle(req, res, parsedUrl);
     } catch (err) {
       console.error('Error occurred handling', req.url, err);
