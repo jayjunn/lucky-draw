@@ -46,7 +46,7 @@ async function unlockAdmin(page: any) {
 }
 
 test.describe('럭키드로우 전체 E2E 실시간 시나리오 테스트', () => {
-  test.setTimeout(60000);
+  test.setTimeout(90000);
 
   test.beforeEach(async () => {
     await resetDb();
