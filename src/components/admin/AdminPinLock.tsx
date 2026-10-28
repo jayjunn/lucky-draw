@@ -20,10 +20,10 @@ export const AdminPinLock: React.FC<AdminPinLockProps> = ({
   const [isError, setIsError] = useState<boolean>(false);
 
   const handleKeyPress = (num: string) => {
-    if (pin.length < 4) {
-      Haptic.lightTap();
-      const nextPin = pin + num;
-      setPin(nextPin);
+    Haptic.lightTap();
+    setPin((prev) => {
+      if (prev.length >= 4) return prev;
+      const nextPin = prev + num;
 
       if (nextPin.length === 4) {
         if (nextPin === correctPin || nextPin === magicPin) {
@@ -40,7 +40,8 @@ export const AdminPinLock: React.FC<AdminPinLockProps> = ({
           }, 600);
         }
       }
-    }
+      return nextPin;
+    });
   };
 
   const handleDelete = () => {

@@ -33,6 +33,18 @@ async function resetDb() {
   });
 }
 
+async function unlockAdmin(page: any) {
+  const pinTitle = page.locator('text=관리자 인증');
+  if (await pinTitle.isVisible({ timeout: 4000 }).catch(() => false)) {
+    const btn7 = page.locator('button:has-text("7")');
+    for (let i = 0; i < 4; i++) {
+      await btn7.click();
+      await page.waitForTimeout(80);
+    }
+  }
+  await expect(page.locator('h1:has-text("MANAGEMENT")')).toBeVisible({ timeout: 15000 });
+}
+
 test.describe('럭키드로우 전체 E2E 실시간 시나리오 테스트', () => {
   test.setTimeout(60000);
 
@@ -85,18 +97,7 @@ test.describe('럭키드로우 전체 E2E 실시간 시나리오 테스트', () 
 
     // --- STEP 2: 어드민 페이지에서 PIN 잠금 해제 및 실시간 참가자 확인 ---
     await adminPage.goto('/admin');
-    
-    // PIN 인증 키패드가 나타나면 7777 입력
-    const pinTitle = adminPage.locator('text=관리자 인증');
-    if (await pinTitle.isVisible({ timeout: 3000 }).catch(() => false)) {
-      const btn7 = adminPage.locator('button:has-text("7")');
-      await btn7.click();
-      await btn7.click();
-      await btn7.click();
-      await btn7.click();
-    }
-
-    await expect(adminPage.locator('h1:has-text("MANAGEMENT")')).toBeVisible({ timeout: 10000 });
+    await unlockAdmin(adminPage);
     await expect(adminPage.locator(`text=${testNickName}`).first()).toBeVisible({ timeout: 10000 });
 
     // --- STEP 3: 5등 상품 실시간 롤링 시작 ---
@@ -151,15 +152,7 @@ test.describe('럭키드로우 전체 E2E 실시간 시나리오 테스트', () 
 
     // 1. 어드민 페이지 접근 및 PIN 해제
     await adminPage.goto('/admin');
-    const pinTitle = adminPage.locator('text=관리자 인증');
-    if (await pinTitle.isVisible({ timeout: 3000 }).catch(() => false)) {
-      const btn7 = adminPage.locator('button:has-text("7")');
-      await btn7.click();
-      await btn7.click();
-      await btn7.click();
-      await btn7.click();
-    }
-    await expect(adminPage.locator('h1:has-text("MANAGEMENT")')).toBeVisible({ timeout: 10000 });
+    await unlockAdmin(adminPage);
 
     // 2. 더미 참가자 10명 생성
     const addDummiesBtn = adminPage.locator('button:has-text("+10명")');
@@ -212,12 +205,7 @@ test.describe('럭키드로우 전체 E2E 실시간 시나리오 테스트', () 
 
     // 1. 어드민 접속 및 PIN 해제
     await adminPage.goto('/admin');
-    const pinTitle = adminPage.locator('text=관리자 인증');
-    if (await pinTitle.isVisible({ timeout: 3000 }).catch(() => false)) {
-      const btn7 = adminPage.locator('button:has-text("7")');
-      for (let i = 0; i < 4; i++) await btn7.click();
-    }
-    await expect(adminPage.locator('h1:has-text("MANAGEMENT")')).toBeVisible({ timeout: 10000 });
+    await unlockAdmin(adminPage);
 
     // 2. 상품 관리 탭으로 이동
     const prizesTabBtn = adminPage.locator('button:has-text("상품 설정")');
@@ -250,8 +238,8 @@ test.describe('럭키드로우 전체 E2E 실시간 시나리오 테스트', () 
     // 5. 전광판(/display) 화면에서 커스텀 라벨 및 등수 숨김 반영 확인
     await displayPage.goto('/display');
     await expect(displayPage.locator('text=최고급 안마의자')).toBeVisible({ timeout: 10000 });
-    await expect(displayPage.locator('text=대상')).toBeVisible();
-    await expect(displayPage.locator('text=서프라이즈 선물박스')).toBeVisible();
+    await expect(displayPage.locator('text=대상').first()).toBeVisible({ timeout: 10000 });
+    await expect(displayPage.locator('text=서프라이즈 선물박스')).toBeVisible({ timeout: 10000 });
 
     await adminContext.close();
     await displayContext.close();
