@@ -38,10 +38,15 @@ export default function AdminPage() {
     setNewPrizeTitle,
     newPrizeRank,
     setNewPrizeRank,
+    newPrizeRankLabel,
+    setNewPrizeRankLabel,
+    newPrizeHideRank,
+    setNewPrizeHideRank,
     handleStartDraw,
     handleAnnounceWinner,
     handleRedrawAbsent,
     handleRedrawSpecificAbsent,
+    handleUpdatePrizeRankConfig,
     batchCounts,
     setBatchCountForRank,
     handleStartTimer,
@@ -245,6 +250,7 @@ export default function AdminPage() {
             participants={participants}
             searchQuery={searchQuery}
             onSetSearchQuery={setSearchQuery}
+            onUpdatePrizeRankConfig={handleUpdatePrizeRankConfig}
           />
         )}
 
@@ -255,8 +261,13 @@ export default function AdminPage() {
             setNewPrizeTitle={setNewPrizeTitle}
             newPrizeRank={newPrizeRank}
             setNewPrizeRank={setNewPrizeRank}
+            newPrizeRankLabel={newPrizeRankLabel}
+            setNewPrizeRankLabel={setNewPrizeRankLabel}
+            newPrizeHideRank={newPrizeHideRank}
+            setNewPrizeHideRank={setNewPrizeHideRank}
             onAddPrize={handleAddPrize}
             onDeletePrize={handleDeletePrize}
+            onUpdatePrizeRankConfig={handleUpdatePrizeRankConfig}
           />
         )}
 

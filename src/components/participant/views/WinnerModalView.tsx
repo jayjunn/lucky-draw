@@ -1,7 +1,7 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Trophy, CheckCircle2 } from 'lucide-react';
-import { Participant, DrawState } from '@/types';
+import { Participant, DrawState, getRankLabel } from '@/types';
 import { ThemeStyleConfig } from '@/hooks/useParticipant';
 
 interface WinnerModalViewProps {
@@ -51,7 +51,9 @@ export const WinnerModalView: React.FC<WinnerModalViewProps> = ({
                 WINNER CONFIRMATION
               </span>
               <h3 className="text-xl font-black text-white">
-                {currentDraw?.currentWinner?.rank || participant?.isWinner?.rank}등 당첨을 축하합니다!
+                {getRankLabel(currentDraw?.currentWinner || participant?.isWinner)
+                  ? `${getRankLabel(currentDraw?.currentWinner || participant?.isWinner)} 당첨을 축하합니다!`
+                  : '당첨을 축하합니다!'}
               </h3>
               <p className="text-sm font-bold text-zinc-300">
                 {currentDraw?.currentWinner?.prize || participant?.isWinner?.prize}

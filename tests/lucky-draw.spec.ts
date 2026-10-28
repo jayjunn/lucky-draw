@@ -203,5 +203,59 @@ test.describe('럭키드로우 전체 E2E 실시간 시나리오 테스트', () 
     await displayContext.close();
   });
 
+  test('등수 숨기기 및 커스텀 등수 라벨(대상, 특별상 등) 설정과 전광판 반영 검증', async ({ browser }) => {
+    const adminContext = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+    const adminPage = await adminContext.newPage();
+
+    const displayContext = await browser.newContext({ viewport: { width: 1920, height: 1080 } });
+    const displayPage = await displayContext.newPage();
+
+    // 1. 어드민 접속 및 PIN 해제
+    await adminPage.goto('/admin');
+    const pinTitle = adminPage.locator('text=관리자 인증');
+    if (await pinTitle.isVisible({ timeout: 3000 }).catch(() => false)) {
+      const btn7 = adminPage.locator('button:has-text("7")');
+      for (let i = 0; i < 4; i++) await btn7.click();
+    }
+    await expect(adminPage.locator('h1:has-text("MANAGEMENT")')).toBeVisible({ timeout: 10000 });
+
+    // 2. 상품 관리 탭으로 이동
+    const prizesTabBtn = adminPage.locator('button:has-text("상품 설정")');
+    await prizesTabBtn.click();
+    await expect(adminPage.locator('text=상품 목록 커스텀 설정')).toBeVisible();
+
+    // 3. 커스텀 라벨 '대상' 프리셋 클릭 및 상품 추가
+    const daesangPresetBtn = adminPage.locator('button:has-text("대상")').first();
+    await daesangPresetBtn.click();
+    const prizeTitleInput = adminPage.locator('input[placeholder*="다이슨 에어랩"]');
+    await prizeTitleInput.fill('최고급 안마의자');
+    await adminPage.locator('button:has-text("추가하기")').click();
+
+    // 어드민 상품 목록에 '대상' 뱃지와 상품명 노출 확인
+    await expect(adminPage.locator('text=최고급 안마의자')).toBeVisible({ timeout: 5000 });
+    await expect(prizeTitleInput).toHaveValue('');
+
+    // 4. '등수 숨기기' 체크 후 상품 추가
+    const hideRankCheckbox = adminPage.locator('label:has-text("등수/라벨 숨기기") input[type="checkbox"]');
+    await hideRankCheckbox.check();
+    await expect(hideRankCheckbox).toBeChecked();
+    await prizeTitleInput.fill('서프라이즈 선물박스');
+    await expect(prizeTitleInput).toHaveValue('서프라이즈 선물박스');
+    await adminPage.locator('button:has-text("추가하기")').click();
+
+    // 어드민 상품 목록에 '등수 숨김' 태그 확인
+    await expect(adminPage.locator('text=서프라이즈 선물박스')).toBeVisible({ timeout: 5000 });
+    await expect(adminPage.locator('span:has-text("등수 숨김")').first()).toBeVisible();
+
+    // 5. 전광판(/display) 화면에서 커스텀 라벨 및 등수 숨김 반영 확인
+    await displayPage.goto('/display');
+    await expect(displayPage.locator('text=최고급 안마의자')).toBeVisible({ timeout: 10000 });
+    await expect(displayPage.locator('text=대상')).toBeVisible();
+    await expect(displayPage.locator('text=서프라이즈 선물박스')).toBeVisible();
+
+    await adminContext.close();
+    await displayContext.close();
+  });
+
 });
 

@@ -7,6 +7,7 @@ import {
   announceWinnerDirect, 
   redrawAbsentDirect, 
   redrawSpecificAbsentDirect,
+  updatePrizeRankConfigDirect,
   setThemeDirect, 
   resetAllDirect,
   getFirebaseDb 
@@ -23,6 +24,8 @@ export function useAdmin() {
 
   const [newPrizeTitle, setNewPrizeTitle] = useState<string>('');
   const [newPrizeRank, setNewPrizeRank] = useState<number>(1);
+  const [newPrizeRankLabel, setNewPrizeRankLabel] = useState<string>('');
+  const [newPrizeHideRank, setNewPrizeHideRank] = useState<boolean>(false);
   const [editingPrizeId, setEditingPrizeId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState<string>('');
   const [editRank, setEditRank] = useState<number>(1);
@@ -218,6 +221,8 @@ export function useAdmin() {
       {
         id: 'prize-' + Date.now(),
         rank: Number(newPrizeRank),
+        rankLabel: newPrizeRankLabel.trim() || undefined,
+        hideRank: Boolean(newPrizeHideRank),
         title: newPrizeTitle.trim(),
         count: 1,
         announced: false,
@@ -240,6 +245,21 @@ export function useAdmin() {
     socket.emit('admin_update_prizes', updatedPrizes);
     setNewPrizeTitle('');
     setNewPrizeRank(updatedPrizes.length + 1);
+    setNewPrizeRankLabel('');
+    setNewPrizeHideRank(false);
+  };
+
+  // 등수 라벨 및 숨김 설정 개별 수정
+  const handleUpdatePrizeRankConfig = async (
+    prizeId: string,
+    rankLabel?: string,
+    hideRank?: boolean
+  ) => {
+    try {
+      await updatePrizeRankConfigDirect(prizeId, rankLabel, hideRank);
+    } catch (e) {
+      console.warn(e);
+    }
   };
 
   // 상품 삭제
@@ -304,6 +324,10 @@ export function useAdmin() {
     setNewPrizeTitle,
     newPrizeRank,
     setNewPrizeRank,
+    newPrizeRankLabel,
+    setNewPrizeRankLabel,
+    newPrizeHideRank,
+    setNewPrizeHideRank,
     editingPrizeId,
     setEditingPrizeId,
     editTitle,
@@ -314,6 +338,7 @@ export function useAdmin() {
     handleAnnounceWinner,
     handleRedrawAbsent,
     handleRedrawSpecificAbsent,
+    handleUpdatePrizeRankConfig,
     batchCounts,
     setBatchCountForRank,
     handleStartTimer,

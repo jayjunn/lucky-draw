@@ -1,8 +1,8 @@
 'use client';
 
 import React from 'react';
-import { Prize, Participant, DrawState } from '@/types';
-import { Dice5, Play, Sparkles, AlertTriangle, Clock, Users, Search } from 'lucide-react';
+import { Prize, Participant, DrawState, getRankLabel } from '@/types';
+import { Dice5, Play, Sparkles, AlertTriangle, Clock, Users, Search, EyeOff } from 'lucide-react';
 
 interface AdminDrawTabProps {
   prizes: Prize[];
@@ -19,6 +19,7 @@ interface AdminDrawTabProps {
   participants: Participant[];
   searchQuery: string;
   onSetSearchQuery: (val: string) => void;
+  onUpdatePrizeRankConfig?: (prizeId: string, rankLabel?: string, hideRank?: boolean) => void;
 }
 
 export const AdminDrawTab: React.FC<AdminDrawTabProps> = ({
@@ -60,7 +61,7 @@ export const AdminDrawTab: React.FC<AdminDrawTabProps> = ({
               </span>
             </div>
             <span className="text-[11px] text-zinc-400 font-sans hidden sm:inline">
-              5등부터 차례대로 발표
+              순서대로 발표
             </span>
           </div>
 
@@ -72,6 +73,7 @@ export const AdminDrawTab: React.FC<AdminDrawTabProps> = ({
               const isRoulette = isCurrent && currentDraw?.phase === 'ROULETTE';
               const absentCount = prize.absentHistory?.length || 0;
               const currentBatchCount = batchCounts?.[prize.rank] || prize.count || 1;
+              const rankBadge = getRankLabel(prize);
 
               return (
                 <div
@@ -87,9 +89,15 @@ export const AdminDrawTab: React.FC<AdminDrawTabProps> = ({
                   {/* 1. 상단: 상품 기본 정보 및 상태 */}
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-2.5 min-w-0">
-                      <span className="px-2.5 py-1 rounded-md bg-zinc-100 text-zinc-900 text-xs font-black shrink-0">
-                        {prize.rank}등
-                      </span>
+                      {prize.hideRank ? (
+                        <span className="px-2 py-0.5 rounded bg-zinc-100 text-zinc-400 border border-dashed border-zinc-300 text-[11px] font-bold shrink-0 flex items-center gap-1">
+                          <EyeOff className="w-3 h-3 text-zinc-400" /> 등수 숨김
+                        </span>
+                      ) : (
+                        <span className="px-2.5 py-1 rounded-md bg-zinc-100 text-zinc-900 text-xs font-black shrink-0">
+                          {rankBadge || `${prize.rank}등`}
+                        </span>
+                      )}
                       <h4 className="text-sm font-bold text-zinc-900 truncate">
                         {prize.title}
                       </h4>
@@ -346,7 +354,7 @@ export const AdminDrawTab: React.FC<AdminDrawTabProps> = ({
                       <span className="font-bold">{p.name}</span>
                       {isWinner && p.isWinner && (
                         <p className="text-[10px] text-zinc-300">
-                          ★ {p.isWinner.rank}등 당첨 ({p.isWinner.prize})
+                          ★ {getRankLabel(p.isWinner) ? `${getRankLabel(p.isWinner)} 당첨` : '당첨'} ({p.isWinner.prize})
                         </p>
                       )}
                     </div>

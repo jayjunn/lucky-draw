@@ -1,5 +1,5 @@
 import React from 'react';
-import { Participant } from '@/types';
+import { Participant, getRankLabel } from '@/types';
 import { ThemeStyleConfig } from '@/hooks/useParticipant';
 import { Trophy, MapPin, Share2, Instagram, Info, Sparkles } from 'lucide-react';
 
@@ -9,6 +9,8 @@ interface PassCardViewProps {
   themeCfg: ThemeStyleConfig;
   isMeWinner?: {
     rank: number;
+    rankLabel?: string;
+    hideRank?: boolean;
     prize: string;
   };
   onShare?: () => void;
@@ -72,7 +74,9 @@ export const PassCardView: React.FC<PassCardViewProps> = ({
             style={{ backgroundColor: themeCfg.accent }}
           >
             <Trophy className="w-3.5 h-3.5" />
-            <span>{isMeWinner.rank}등 당첨 확정</span>
+            <span>
+              {getRankLabel(isMeWinner) ? `${getRankLabel(isMeWinner)} 당첨 확정` : '당첨 확정'}
+            </span>
           </div>
         )}
 

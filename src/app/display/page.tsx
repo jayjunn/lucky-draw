@@ -3,6 +3,7 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useDisplay } from '@/hooks/useDisplay';
+import { getRankLabel } from '@/types';
 import { 
   Trophy, 
   Users, 
@@ -215,7 +216,8 @@ export default function DisplayPage() {
               <div className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-full font-bold text-xs shadow-md ${currentTheme.badge}`}>
                 <Clock className="w-3.5 h-3.5 animate-spin" />
                 <span>
-                  [{currentDraw?.currentRank}등] {rollingNumbers.length > 1 ? `${rollingNumbers.length}명 일괄 롤링 중` : '럭키드로우 롤링 중'}
+                  {getRankLabel(activePrize || { rank: currentDraw?.currentRank ?? undefined, rankLabel: currentDraw?.currentRankLabel, hideRank: currentDraw?.currentHideRank }) ? `[${getRankLabel(activePrize || { rank: currentDraw?.currentRank ?? undefined, rankLabel: currentDraw?.currentRankLabel, hideRank: currentDraw?.currentHideRank })}] ` : ''}
+                  {rollingNumbers.length > 1 ? `${rollingNumbers.length}명 일괄 롤링 중` : '럭키드로우 롤링 중'}
                 </span>
               </div>
 
@@ -270,7 +272,10 @@ export default function DisplayPage() {
               >
                 <div className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-full font-black text-xs tracking-wider shadow-lg ${currentTheme.badge}`}>
                   <Sparkles className="w-3.5 h-3.5" />
-                  <span>[{currentDraw?.currentRank}등] 총 {announcedWinners.length}명 동시 당첨 발표!</span>
+                  <span>
+                    {getRankLabel(activePrize || currentDraw?.currentWinners?.[0] || { rank: currentDraw?.currentRank ?? undefined, rankLabel: currentDraw?.currentRankLabel, hideRank: currentDraw?.currentHideRank }) ? `[${getRankLabel(activePrize || currentDraw?.currentWinners?.[0] || { rank: currentDraw?.currentRank ?? undefined, rankLabel: currentDraw?.currentRankLabel, hideRank: currentDraw?.currentHideRank })}] ` : ''}
+                    총 {announcedWinners.length}명 동시 당첨 발표!
+                  </span>
                 </div>
 
                 <div className="space-y-1">
@@ -329,7 +334,11 @@ export default function DisplayPage() {
               >
                 <div className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-full font-black text-xs tracking-wider shadow-lg ${currentTheme.badge}`}>
                   <Sparkles className="w-3.5 h-3.5" />
-                  <span>{currentDraw?.currentWinner?.rank}등 당첨자 발표</span>
+                  <span>
+                    {getRankLabel(activePrize || currentDraw?.currentWinner)
+                      ? `${getRankLabel(activePrize || currentDraw?.currentWinner)} 당첨자 발표`
+                      : '당첨자 발표'}
+                  </span>
                 </div>
 
                 <h2 className="text-3xl lg:text-5xl font-black tracking-tight">
@@ -399,7 +408,7 @@ export default function DisplayPage() {
       <footer className={`relative z-10 pt-4 border-t transition-colors duration-500 ${currentTheme.border}`}>
         <div className="flex items-center justify-between mb-3 text-xs opacity-70">
           <span className="font-bold uppercase tracking-wider">순위별 당첨 현황</span>
-          <span>5등부터 차례대로 발표</span>
+          <span>순서대로 발표</span>
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
@@ -411,6 +420,7 @@ export default function DisplayPage() {
               const isWon = Boolean(prize.winner || (prize.winners && prize.winners.length > 0));
               const isCurrent = currentDraw?.currentRank === prize.rank;
               const absentCount = prize.absentHistory?.length || 0;
+              const prizeRankLabel = getRankLabel(prize);
 
               return (
                 <div
@@ -424,13 +434,17 @@ export default function DisplayPage() {
                   }`}
                 >
                   <div className="flex items-center justify-between mb-1">
-                    <span
-                      className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
-                        isWon ? 'bg-black text-white' : 'bg-black/20 text-current'
-                      }`}
-                    >
-                      {prize.rank}등
-                    </span>
+                    {prizeRankLabel ? (
+                      <span
+                        className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                          isWon ? 'bg-black text-white' : 'bg-black/20 text-current'
+                        }`}
+                      >
+                        {prizeRankLabel}
+                      </span>
+                    ) : (
+                      <span />
+                    )}
                     {isWon ? (
                       <span className="text-[10px] flex items-center gap-0.5 font-bold">
                         <Check className="w-3 h-3" /> 확정

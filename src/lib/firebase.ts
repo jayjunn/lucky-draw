@@ -285,9 +285,22 @@ export async function confirmPresenceDirect(participantId: string): Promise<void
 export async function startRouletteDirect(rank: number, batchCount: number = 1): Promise<void> {
   const firestore = getFirebaseDb();
   const eventRef = doc(firestore, EVENT_DOC_PATH[0], EVENT_DOC_PATH[1]);
+  const snap = await getDoc(eventRef);
+  let rankLabel: string | undefined;
+  let hideRank: boolean | undefined;
+  if (snap.exists()) {
+    const data = snap.data() as AppState;
+    const prize = data.prizes?.find((p) => p.rank === rank);
+    if (prize) {
+      rankLabel = prize.rankLabel;
+      hideRank = prize.hideRank;
+    }
+  }
   await updateDoc(eventRef, {
     drawState: {
       currentRank: rank,
+      currentRankLabel: rankLabel || '',
+      currentHideRank: Boolean(hideRank),
       phase: 'ROULETTE',
       batchCount: Math.max(1, batchCount),
       currentWinner: null,
@@ -366,6 +379,8 @@ export async function announceWinnerDirect(
     const now = Date.now();
     announcedWinnersList = chosenParticipants.map((p) => ({
       rank,
+      rankLabel: prize.rankLabel || '',
+      hideRank: Boolean(prize.hideRank),
       prize: prize.title,
       winnerNumber: p.number,
       winnerName: p.name,
@@ -398,7 +413,13 @@ export async function announceWinnerDirect(
       if (chosenIds.has(p.id)) {
         return {
           ...p,
-          isWinner: { rank, prize: prize.title, announcedAt: now },
+          isWinner: {
+            rank,
+            rankLabel: prize.rankLabel || '',
+            hideRank: Boolean(prize.hideRank),
+            prize: prize.title,
+            announcedAt: now,
+          },
           presenceConfirmed: false,
         };
       }
@@ -410,6 +431,8 @@ export async function announceWinnerDirect(
       participants: updatedParticipants,
       drawState: {
         currentRank: rank,
+        currentRankLabel: prize.rankLabel || '',
+        currentHideRank: Boolean(prize.hideRank),
         phase: 'ANNOUNCED',
         batchCount: chosenParticipants.length,
         currentWinner: announcedWinnersList[0] || null,
@@ -493,6 +516,8 @@ export async function redrawSpecificAbsentDirect(rank: number, absentNumber: num
       newParticipantWinner = candidates[Math.floor(Math.random() * candidates.length)];
       replacedWinner = {
         rank,
+        rankLabel: prize.rankLabel || '',
+        hideRank: Boolean(prize.hideRank),
         prize: prize.title,
         winnerNumber: newParticipantWinner.number,
         winnerName: newParticipantWinner.name,
@@ -518,7 +543,13 @@ export async function redrawSpecificAbsentDirect(rank: number, absentNumber: num
       if (pIdx !== -1) {
         updatedParticipants[pIdx] = {
           ...updatedParticipants[pIdx],
-          isWinner: { rank, prize: prize.title, announcedAt: now },
+          isWinner: {
+            rank,
+            rankLabel: prize.rankLabel || '',
+            hideRank: Boolean(prize.hideRank),
+            prize: prize.title,
+            announcedAt: now,
+          },
           presenceConfirmed: false,
         };
       }
@@ -635,6 +666,35 @@ export async function updateEventNoticeDirect(notice: Partial<typeof DEFAULT_EVE
   }
   await updateDoc(eventRef, {
     notice: { ...currentNotice, ...notice },
+    updatedAt: serverTimestamp(),
+  });
+}
+
+// 11. 상품 등수 커스텀 명칭 및 숨김 설정 업데이트
+export async function updatePrizeRankConfigDirect(
+  prizeId: string,
+  rankLabel?: string,
+  hideRank?: boolean
+): Promise<void> {
+  const firestore = getFirebaseDb();
+  const eventRef = doc(firestore, EVENT_DOC_PATH[0], EVENT_DOC_PATH[1]);
+  const snap = await getDoc(eventRef);
+  if (!snap.exists()) return;
+
+  const data = snap.data() as AppState;
+  const updatedPrizes = (data.prizes || []).map((p) => {
+    if (p.id === prizeId) {
+      return {
+        ...p,
+        rankLabel: rankLabel !== undefined ? (rankLabel.trim() || undefined) : p.rankLabel,
+        hideRank: hideRank !== undefined ? Boolean(hideRank) : p.hideRank,
+      };
+    }
+    return p;
+  });
+
+  await updateDoc(eventRef, {
+    prizes: updatedPrizes,
     updatedAt: serverTimestamp(),
   });
 }

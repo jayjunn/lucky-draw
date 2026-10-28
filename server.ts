@@ -164,6 +164,8 @@ app.prepare().then(() => {
 
       drawState = {
         currentRank: data.rank,
+        currentRankLabel: prize.rankLabel || '',
+        currentHideRank: Boolean(prize.hideRank),
         phase: 'ROULETTE',
         batchCount,
         currentWinner: null,
@@ -208,6 +210,8 @@ app.prepare().then(() => {
       const now = Date.now();
       const announcedWinners = chosenWinners.map((winner) => ({
         rank: prize.rank,
+        rankLabel: prize.rankLabel || '',
+        hideRank: Boolean(prize.hideRank),
         prize: prize.title,
         winnerNumber: winner.number,
         winnerName: winner.name,
@@ -230,6 +234,8 @@ app.prepare().then(() => {
       chosenWinners.forEach((winner) => {
         winner.isWinner = {
           rank: prize.rank,
+          rankLabel: prize.rankLabel || '',
+          hideRank: Boolean(prize.hideRank),
           prize: prize.title,
           announcedAt: now,
         };
@@ -238,6 +244,8 @@ app.prepare().then(() => {
 
       drawState = {
         currentRank: data.rank,
+        currentRankLabel: prize.rankLabel || '',
+        currentHideRank: Boolean(prize.hideRank),
         phase: 'ANNOUNCED',
         batchCount: chosenWinners.length,
         callTimer: 30,
