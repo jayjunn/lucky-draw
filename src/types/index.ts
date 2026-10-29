@@ -130,6 +130,8 @@ export function getTagColorClass(tag?: string, color?: string): string {
   }
 }
 
+export type AdminTabType = 'draw' | 'prizes' | 'themes' | 'notice' | 'logs' | 'settings';
+
 export type ThemeType = 'HALLOWEEN' | 'MONO' | 'CYBER' | 'GOLD';
 
 export interface EventNoticeConfig {

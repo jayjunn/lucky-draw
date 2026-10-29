@@ -240,6 +240,11 @@ test.describe('럭키드로우 전체 E2E 실시간 시나리오 테스트', () 
     await expect(adminPage.locator('text=서프라이즈 선물박스')).toBeVisible({ timeout: 5000 });
     await expect(adminPage.locator('span:has-text("등수 숨김")').first()).toBeVisible();
 
+    // 페이지 새로고침(F5) 후에도 URL 쿼리(?tab=prizes)를 통해 '상품 설정' 탭이 초기화되지 않고 유지되는지 검증
+    await adminPage.reload();
+    await expect(adminPage.locator('text=상품 목록 커스텀 설정')).toBeVisible({ timeout: 5000 });
+    await expect(adminPage.locator('text=서프라이즈 선물박스')).toBeVisible({ timeout: 5000 });
+
     // 5. 전광판(/display) 화면에서 커스텀 라벨 및 등수 숨김 반영 확인
     await displayPage.goto('/display');
     await expect(displayPage.locator('text=최고급 안마의자').first()).toBeVisible({ timeout: 10000 });

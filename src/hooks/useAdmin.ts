@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { AppState, Prize, ThemeType } from '@/types';
+import { AppState, Prize, ThemeType, AdminTabType } from '@/types';
 import { getSocket } from '@/lib/socket';
 import { 
   subscribeAppState, 
@@ -16,13 +16,61 @@ import {
 } from '@/lib/firebase';
 import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 
+const VALID_TABS: AdminTabType[] = ['draw', 'prizes', 'themes', 'notice', 'logs', 'settings'];
+
 export function useAdmin() {
   const [appState, setAppState] = useState<AppState | null>(null);
-  const [activeTab, setActiveTab] = useState<'draw' | 'prizes' | 'themes' | 'notice' | 'logs' | 'settings'>('draw');
+  const [activeTab, setActiveTabState] = useState<AdminTabType>('draw');
   const [isUnlocked, setIsUnlocked] = useState<boolean>(false);
   const [manualNumberInput, setManualNumberInput] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [eventNameInput, setEventNameInput] = useState<string>('');
+
+  // 탭 변경 함수 (상태 + URL query param 동기화)
+  const setActiveTab = useCallback((tab: AdminTabType) => {
+    setActiveTabState(tab);
+    if (typeof window !== 'undefined') {
+      try {
+        const url = new URL(window.location.href);
+        url.searchParams.set('tab', tab);
+        window.history.replaceState(null, '', url.toString());
+      } catch (e) {
+        console.warn('Failed to update admin tab URL:', e);
+      }
+    }
+  }, []);
+
+  // 새로고침 시 URL query param에서 탭 복구
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const params = new URLSearchParams(window.location.search);
+    const tabParam = params.get('tab') as AdminTabType;
+
+    if (tabParam && VALID_TABS.includes(tabParam)) {
+      setActiveTabState(tabParam);
+    } else {
+      const url = new URL(window.location.href);
+      if (!url.searchParams.has('tab')) {
+        url.searchParams.set('tab', 'draw');
+        window.history.replaceState(null, '', url.toString());
+      }
+    }
+
+    // 뒤로가기 / 앞으로가기 지원
+    const handlePopState = () => {
+      const currentParams = new URLSearchParams(window.location.search);
+      const currentTab = currentParams.get('tab') as AdminTabType;
+      if (currentTab && VALID_TABS.includes(currentTab)) {
+        setActiveTabState(currentTab);
+      } else {
+        setActiveTabState('draw');
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   const [newPrizeTitle, setNewPrizeTitle] = useState<string>('');
   const [newPrizeRank, setNewPrizeRank] = useState<number>(1);
