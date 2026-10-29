@@ -26,6 +26,8 @@ export interface Prize {
   rank: number; // 순서 정렬 번호 (5, 4, 3, 2, 1 등)
   rankLabel?: string; // 커스텀 표시 명칭 (예: "대상", "특별상", "행운상", "1등")
   hideRank?: boolean; // 등수/라벨 숨김 여부 (true면 화면에 등수 뱃지 미표시)
+  adminTag?: string; // 관리자 전용 구분 태그/메모 (예: "30일", "31일", "10/30", "10/31") - 전광판/참가자에겐 비공개
+  tagColor?: string; // 태그 색상 ('blue' | 'purple' | 'amber' | 'emerald' | 'rose' | 'zinc')
   title: string; // 상품명
   description?: string;
   count: number;
@@ -85,6 +87,47 @@ export function getRankLabel(
     return `${item.rank}${fallbackSuffix}`;
   }
   return '';
+}
+
+/**
+ * 관리자 화면용 등수/라벨 포맷팅 헬퍼
+ * - 화면/참가자에게 숨김(hideRank: true) 처리되어 있더라도, 관리자 화면에서는 항상 원래 등수/라벨을 식별할 수 있도록 반환
+ */
+export function getAdminPrizeLabel(
+  item?: { rank?: number; rankLabel?: string } | null,
+  fallbackSuffix: string = '등'
+): string {
+  if (!item) return '';
+  if (item.rankLabel && item.rankLabel.trim() !== '') {
+    return item.rankLabel.trim();
+  }
+  if (typeof item.rank === 'number' && item.rank > 0) {
+    return `${item.rank}${fallbackSuffix}`;
+  }
+  return '';
+}
+
+/**
+ * 관리자 전용 구분 태그 색상 클래스 반환
+ */
+export function getTagColorClass(tag?: string, color?: string): string {
+  if (!tag) return '';
+  const chosenColor = color || (tag.includes('30') ? 'blue' : tag.includes('31') ? 'purple' : 'zinc');
+  switch (chosenColor) {
+    case 'blue':
+      return 'bg-sky-50 text-sky-700 border-sky-300 ring-1 ring-sky-200';
+    case 'purple':
+      return 'bg-purple-50 text-purple-700 border-purple-300 ring-1 ring-purple-200';
+    case 'emerald':
+      return 'bg-emerald-50 text-emerald-700 border-emerald-300 ring-1 ring-emerald-200';
+    case 'amber':
+    case 'orange':
+      return 'bg-amber-50 text-amber-700 border-amber-300 ring-1 ring-amber-200';
+    case 'rose':
+      return 'bg-rose-50 text-rose-700 border-rose-300 ring-1 ring-rose-200';
+    default:
+      return 'bg-zinc-100 text-zinc-700 border-zinc-300';
+  }
 }
 
 export type ThemeType = 'HALLOWEEN' | 'MONO' | 'CYBER' | 'GOLD';

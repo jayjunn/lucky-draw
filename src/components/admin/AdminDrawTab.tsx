@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Prize, Participant, DrawState, getRankLabel } from '@/types';
+import { Prize, Participant, DrawState, getRankLabel, getAdminPrizeLabel, getTagColorClass } from '@/types';
 import { Dice5, Play, Sparkles, AlertTriangle, Clock, Users, Search, EyeOff } from 'lucide-react';
 
 interface AdminDrawTabProps {
@@ -73,7 +73,7 @@ export const AdminDrawTab: React.FC<AdminDrawTabProps> = ({
               const isRoulette = isCurrent && currentDraw?.phase === 'ROULETTE';
               const absentCount = prize.absentHistory?.length || 0;
               const currentBatchCount = (isCurrent && currentDraw?.batchCount) || batchCounts?.[prize.rank] || prize.count || 1;
-              const rankBadge = getRankLabel(prize);
+              const adminRankBadge = getAdminPrizeLabel(prize);
 
               return (
                 <div
@@ -88,16 +88,35 @@ export const AdminDrawTab: React.FC<AdminDrawTabProps> = ({
                 >
                   {/* 1. 상단: 상품 기본 정보 및 상태 */}
                   <div className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      {prize.hideRank ? (
-                        <span className="px-2 py-0.5 rounded bg-zinc-100 text-zinc-400 border border-dashed border-zinc-300 text-[11px] font-bold shrink-0 flex items-center gap-1">
-                          <EyeOff className="w-3 h-3 text-zinc-400" /> 등수 숨김
-                        </span>
-                      ) : (
-                        <span className="px-2.5 py-1 rounded-md bg-zinc-100 text-zinc-900 text-xs font-black shrink-0">
-                          {rankBadge || `${prize.rank}등`}
+                    <div className="flex items-center gap-2 min-w-0 flex-wrap">
+                      {/* 관리자 전용 구분 태그 (30일/31일 구분) */}
+                      {prize.adminTag && (
+                        <span
+                          className={`px-2 py-0.5 rounded text-xs border font-bold shrink-0 ${getTagColorClass(
+                            prize.adminTag,
+                            prize.tagColor
+                          )}`}
+                          title="관리자 전용 구분 태그 (전광판/참가자에겐 비공개)"
+                        >
+                          {prize.adminTag}
                         </span>
                       )}
+
+                      {/* 등수/라벨 배지 (관리자는 항상 확인 가능) */}
+                      <span className="px-2.5 py-1 rounded-md bg-zinc-100 text-zinc-900 text-xs font-black shrink-0">
+                        {adminRankBadge || `${prize.rank}등`}
+                      </span>
+
+                      {/* 화면 숨김 안내 배지 */}
+                      {prize.hideRank && (
+                        <span
+                          className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 shrink-0 flex items-center gap-1"
+                          title="전광판 화면 및 참가자 모바일 화면에는 등수가 숨겨지고 상품명만 노출됩니다"
+                        >
+                          <EyeOff className="w-3 h-3 text-amber-600" /> 화면엔 숨김
+                        </span>
+                      )}
+
                       <h4 className="text-sm font-bold text-zinc-900 truncate">
                         {prize.title}
                       </h4>

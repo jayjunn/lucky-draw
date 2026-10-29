@@ -22,7 +22,8 @@ const DEFAULT_PRIZES = [
 async function resetDb() {
   const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
   const db = getFirestore(app);
-  await setDoc(doc(db, 'lucky_draw_events', 'current_event'), {
+  const testDocId = process.env.NEXT_PUBLIC_EVENT_DOC_ID || 'e2e_test_event';
+  await setDoc(doc(db, 'lucky_draw_events', testDocId), {
     participants: [],
     prizes: DEFAULT_PRIZES,
     drawState: { currentRank: null, phase: 'IDLE', currentWinner: null, callTimer: null },

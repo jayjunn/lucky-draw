@@ -11,7 +11,8 @@ import {
   setThemeDirect, 
   resetAllDirect,
   resetDrawsDirect,
-  getFirebaseDb 
+  getFirebaseDb,
+  EVENT_DOC_PATH
 } from '@/lib/firebase';
 import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 
@@ -27,6 +28,8 @@ export function useAdmin() {
   const [newPrizeRank, setNewPrizeRank] = useState<number>(1);
   const [newPrizeRankLabel, setNewPrizeRankLabel] = useState<string>('');
   const [newPrizeHideRank, setNewPrizeHideRank] = useState<boolean>(false);
+  const [newPrizeAdminTag, setNewPrizeAdminTag] = useState<string>('');
+  const [newPrizeTagColor, setNewPrizeTagColor] = useState<string>('');
   const [editingPrizeId, setEditingPrizeId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState<string>('');
   const [editRank, setEditRank] = useState<number>(1);
@@ -214,6 +217,8 @@ export function useAdmin() {
         rank: Number(newPrizeRank),
         rankLabel: newPrizeRankLabel.trim() || undefined,
         hideRank: Boolean(newPrizeHideRank),
+        adminTag: newPrizeAdminTag.trim() || undefined,
+        tagColor: newPrizeTagColor.trim() || undefined,
         title: newPrizeTitle.trim(),
         count: 1,
         announced: false,
@@ -224,7 +229,7 @@ export function useAdmin() {
 
     try {
       const firestore = getFirebaseDb();
-      await updateDoc(doc(firestore, 'lucky_draw_events', 'current_event'), {
+      await updateDoc(doc(firestore, EVENT_DOC_PATH[0], EVENT_DOC_PATH[1]), {
         prizes: updatedPrizes,
         updatedAt: serverTimestamp(),
       });
@@ -238,16 +243,20 @@ export function useAdmin() {
     setNewPrizeRank(updatedPrizes.length + 1);
     setNewPrizeRankLabel('');
     setNewPrizeHideRank(false);
+    setNewPrizeAdminTag('');
+    setNewPrizeTagColor('');
   };
 
-  // 등수 라벨 및 숨김 설정 개별 수정
+  // 등수 라벨, 숨김 설정 및 관리자 태그 개별 수정
   const handleUpdatePrizeRankConfig = async (
     prizeId: string,
     rankLabel?: string,
-    hideRank?: boolean
+    hideRank?: boolean,
+    adminTag?: string,
+    tagColor?: string
   ) => {
     try {
-      await updatePrizeRankConfigDirect(prizeId, rankLabel, hideRank);
+      await updatePrizeRankConfigDirect(prizeId, rankLabel, hideRank, adminTag, tagColor);
     } catch (e) {
       console.warn(e);
     }
@@ -319,6 +328,10 @@ export function useAdmin() {
     setNewPrizeRankLabel,
     newPrizeHideRank,
     setNewPrizeHideRank,
+    newPrizeAdminTag,
+    setNewPrizeAdminTag,
+    newPrizeTagColor,
+    setNewPrizeTagColor,
     editingPrizeId,
     setEditingPrizeId,
     editTitle,

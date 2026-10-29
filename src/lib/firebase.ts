@@ -35,7 +35,8 @@ export function getFirebaseDb(): Firestore {
   return db;
 }
 
-const EVENT_DOC_PATH = ['lucky_draw_events', 'current_event'] as const;
+const EVENT_DOC_ID = process.env.NEXT_PUBLIC_EVENT_DOC_ID || 'current_event';
+export const EVENT_DOC_PATH = ['lucky_draw_events', EVENT_DOC_ID] as const;
 
 // 기본 상품 목록
 const DEFAULT_PRIZES: Prize[] = [
@@ -719,11 +720,13 @@ export async function updateEventNoticeDirect(notice: Partial<typeof DEFAULT_EVE
   });
 }
 
-// 11. 상품 등수 커스텀 명칭 및 숨김 설정 업데이트
+// 11. 상품 등수 커스텀 명칭 및 숨김/관리자 태그 설정 업데이트
 export async function updatePrizeRankConfigDirect(
   prizeId: string,
   rankLabel?: string,
-  hideRank?: boolean
+  hideRank?: boolean,
+  adminTag?: string,
+  tagColor?: string
 ): Promise<void> {
   const firestore = getFirebaseDb();
   const eventRef = doc(firestore, EVENT_DOC_PATH[0], EVENT_DOC_PATH[1]);
@@ -737,6 +740,8 @@ export async function updatePrizeRankConfigDirect(
         ...p,
         rankLabel: rankLabel !== undefined ? (rankLabel.trim() || undefined) : p.rankLabel,
         hideRank: hideRank !== undefined ? Boolean(hideRank) : p.hideRank,
+        adminTag: adminTag !== undefined ? (adminTag.trim() || undefined) : p.adminTag,
+        tagColor: tagColor !== undefined ? (tagColor.trim() || undefined) : p.tagColor,
       };
     }
     return p;

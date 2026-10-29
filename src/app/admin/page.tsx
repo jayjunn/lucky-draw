@@ -42,6 +42,10 @@ export default function AdminPage() {
     setNewPrizeRankLabel,
     newPrizeHideRank,
     setNewPrizeHideRank,
+    newPrizeAdminTag,
+    setNewPrizeAdminTag,
+    newPrizeTagColor,
+    setNewPrizeTagColor,
     handleStartDraw,
     handleAnnounceWinner,
     handleRedrawAbsent,
@@ -265,6 +269,10 @@ export default function AdminPage() {
             setNewPrizeRankLabel={setNewPrizeRankLabel}
             newPrizeHideRank={newPrizeHideRank}
             setNewPrizeHideRank={setNewPrizeHideRank}
+            newPrizeAdminTag={newPrizeAdminTag}
+            setNewPrizeAdminTag={setNewPrizeAdminTag}
+            newPrizeTagColor={newPrizeTagColor}
+            setNewPrizeTagColor={setNewPrizeTagColor}
             onAddPrize={handleAddPrize}
             onDeletePrize={handleDeletePrize}
             onUpdatePrizeRankConfig={handleUpdatePrizeRankConfig}
