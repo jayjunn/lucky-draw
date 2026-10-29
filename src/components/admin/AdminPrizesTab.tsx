@@ -189,9 +189,9 @@ export const AdminPrizesTab: React.FC<AdminPrizesTabProps> = ({
             <div className="flex items-end">
               <button
                 type="submit"
-                className="px-3 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-bold flex items-center gap-1 shadow-sm transition whitespace-nowrap"
+                className="px-3.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-bold flex items-center gap-1 shadow-sm transition whitespace-nowrap"
               >
-                <Plus className="w-3.5 h-3.5" /> 추가
+                <Plus className="w-3.5 h-3.5" /> 추가하기
               </button>
             </div>
           </div>
@@ -252,7 +252,7 @@ export const AdminPrizesTab: React.FC<AdminPrizesTabProps> = ({
               onChange={(e) => setNewPrizeHideRank && setNewPrizeHideRank(e.target.checked)}
               className="rounded text-zinc-900 focus:ring-zinc-900"
             />
-            <span>등수 숨기기 (전광판/참가자에겐 상품명만 노출)</span>
+            <span>등수/라벨 숨기기 (전광판/참가자에겐 상품명만 노출)</span>
           </label>
         </div>
       </form>
@@ -391,7 +391,7 @@ export const AdminPrizesTab: React.FC<AdminPrizesTabProps> = ({
                     {/* 3. 등수 숨김 상태 표시 배지 */}
                     {p.hideRank && (
                       <span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 text-[11px] font-bold flex items-center gap-1" title="전광판과 참가자 화면에는 등수가 숨겨져 상품명만 표시됩니다">
-                        <EyeOff className="w-3 h-3 text-amber-600" /> 화면엔 숨김
+                        <EyeOff className="w-3 h-3 text-amber-600" /> 등수 숨김 (화면 비공개)
                       </span>
                     )}
 

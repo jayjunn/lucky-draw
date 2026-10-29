@@ -1,8 +1,8 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import { Prize, Participant, DrawState, getRankLabel, getAdminPrizeLabel, getTagColorClass } from '@/types';
-import { Dice5, Play, Sparkles, AlertTriangle, Clock, Users, Search, EyeOff } from 'lucide-react';
+import { Dice5, Play, Sparkles, AlertTriangle, Clock, Users, Search, EyeOff, Tag } from 'lucide-react';
 
 interface AdminDrawTabProps {
   prizes: Prize[];
@@ -38,7 +38,28 @@ export const AdminDrawTab: React.FC<AdminDrawTabProps> = ({
   searchQuery,
   onSetSearchQuery,
 }) => {
-  const sortedPrizes = [...prizes].sort((a, b) => b.rank - a.rank);
+  const [selectedTag, setSelectedTag] = useState<string>('ALL');
+
+  const sortedPrizes = useMemo(() => {
+    return [...prizes].sort((a, b) => b.rank - a.rank);
+  }, [prizes]);
+
+  // 등록된 상품들에서 고유 태그 목록 추출
+  const availableTags = useMemo(() => {
+    const tags = new Set<string>();
+    prizes.forEach((p) => {
+      if (p.adminTag && p.adminTag.trim()) {
+        tags.add(p.adminTag.trim());
+      }
+    });
+    return Array.from(tags);
+  }, [prizes]);
+
+  // 행사일/태그별 필터링된 상품 목록
+  const displayedPrizes = useMemo(() => {
+    if (selectedTag === 'ALL') return sortedPrizes;
+    return sortedPrizes.filter((p) => p.adminTag === selectedTag);
+  }, [sortedPrizes, selectedTag]);
 
   const filteredParticipants = participants.filter((p) => {
     if (!searchQuery) return true;
@@ -65,8 +86,46 @@ export const AdminDrawTab: React.FC<AdminDrawTabProps> = ({
             </span>
           </div>
 
+          {/* 행사일 태그 원클릭 필터 바 (30일/31일 구분 시 매우 편리) */}
+          {availableTags.length > 0 && (
+            <div className="flex items-center gap-1.5 flex-wrap p-2.5 rounded-xl bg-purple-50/50 border border-purple-100">
+              <span className="text-[11px] font-bold text-purple-900 mr-1 flex items-center gap-1">
+                <Tag className="w-3 h-3 text-purple-600" /> 행사일 필터:
+              </span>
+              <button
+                type="button"
+                onClick={() => setSelectedTag('ALL')}
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition ${
+                  selectedTag === 'ALL'
+                    ? 'bg-zinc-900 text-white shadow-sm'
+                    : 'bg-white text-zinc-600 border border-zinc-200 hover:bg-zinc-50'
+                }`}
+              >
+                전체 보기 ({prizes.length})
+              </button>
+              {availableTags.map((tag) => {
+                const count = prizes.filter((p) => p.adminTag === tag).length;
+                const isSelected = selectedTag === tag;
+                return (
+                  <button
+                    key={tag}
+                    type="button"
+                    onClick={() => setSelectedTag(tag)}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition border ${
+                      isSelected
+                        ? 'bg-purple-600 text-white border-purple-600 shadow-sm'
+                        : 'bg-white text-purple-900 border-purple-200 hover:bg-purple-100/60'
+                    }`}
+                  >
+                    {tag} ({count})
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
           <div className="space-y-3">
-            {sortedPrizes.map((prize) => {
+            {displayedPrizes.map((prize) => {
               const hasMultipleWinners = Boolean(prize.winners && prize.winners.length > 1);
               const isWon = Boolean(prize.winner || (prize.winners && prize.winners.length > 0));
               const isCurrent = currentDraw?.currentRank === prize.rank;
@@ -113,7 +172,7 @@ export const AdminDrawTab: React.FC<AdminDrawTabProps> = ({
                           className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 shrink-0 flex items-center gap-1"
                           title="전광판 화면 및 참가자 모바일 화면에는 등수가 숨겨지고 상품명만 노출됩니다"
                         >
-                          <EyeOff className="w-3 h-3 text-amber-600" /> 화면엔 숨김
+                          <EyeOff className="w-3 h-3 text-amber-600" /> 등수 숨김 (화면 비공개)
                         </span>
                       )}
 
