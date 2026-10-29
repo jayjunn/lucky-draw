@@ -11,8 +11,13 @@ import {
   setThemeDirect, 
   resetAllDirect,
   resetDrawsDirect,
+  resetParticipantsDirect,
+  deleteParticipantDirect,
+  addPrizeDirect,
+  deletePrizeDirect,
   getFirebaseDb,
-  EVENT_DOC_PATH
+  EVENT_DOC_PATH,
+  sanitizeForFirestore
 } from '@/lib/firebase';
 import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 
@@ -216,10 +221,10 @@ export function useAdmin() {
     const updatedParticipants = [...(appState.participants || []), ...newDummies];
     try {
       const firestore = getFirebaseDb();
-      await updateDoc(doc(firestore, 'lucky_draw_events', 'current_event'), {
+      await updateDoc(doc(firestore, EVENT_DOC_PATH[0], EVENT_DOC_PATH[1]), sanitizeForFirestore({
         participants: updatedParticipants,
         updatedAt: serverTimestamp(),
-      });
+      }));
     } catch (e) {
       console.warn(e);
     }
@@ -228,9 +233,9 @@ export function useAdmin() {
     socket.emit('admin_generate_dummies', { count });
   };
 
-  // 당첨 내역만 초기화
+  // 당첨 내역만 전체 초기화 (참가자 명단 및 저장된 상품 목록 유지)
   const handleResetDraws = async () => {
-    if (!confirm('현재까지의 당첨 내역을 모두 초기화하고 다시 추첨하시겠습니까? (참가자 목록은 유지됩니다)')) return;
+    if (!confirm('현재까지의 모든 당첨 내역을 초기화하시겠습니까? (참가자 명단과 상품 목록은 안전하게 유지됩니다)')) return;
     try {
       await resetDrawsDirect();
     } catch (e: any) {
@@ -241,9 +246,9 @@ export function useAdmin() {
     socket.emit('admin_reset_draws');
   };
 
-  // 전체 초기화
+  // 전체 리셋 (상품 목록은 100% 보존하고 참가자 및 추첨 상태만 초기화)
   const handleResetAll = async () => {
-    if (!confirm('⚠️ 모든 참가자 및 당첨 내역이 완전히 삭제됩니다. 초기화하시겠습니까?')) return;
+    if (!confirm('⚠️ 모든 참가자 명단 및 추첨 상태를 초기화하시겠습니까? (설정해두신 상품 목록은 안전하게 보존됩니다)')) return;
     try {
       await resetAllDirect();
     } catch (e) {
@@ -253,46 +258,64 @@ export function useAdmin() {
     socket.emit('admin_reset_all');
   };
 
-  // 상품 추가
-  const handleAddPrize = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newPrizeTitle.trim() || !appState) return;
-
-    const updatedPrizes: Prize[] = [
-      ...appState.prizes,
-      {
-        id: 'prize-' + Date.now(),
-        rank: Number(newPrizeRank),
-        rankLabel: newPrizeRankLabel.trim() || undefined,
-        hideRank: Boolean(newPrizeHideRank),
-        adminTag: newPrizeAdminTag.trim() || undefined,
-        tagColor: newPrizeTagColor.trim() || undefined,
-        title: newPrizeTitle.trim(),
-        count: 1,
-        announced: false,
-        winner: null,
-        absentHistory: [],
-      },
-    ];
-
+  // 참가자 명단만 초기화
+  const handleResetParticipants = async () => {
+    if (!confirm('참가자 명단을 모두 초기화하시겠습니까? (설정해두신 상품 목록은 안전하게 보존됩니다)')) return;
     try {
-      const firestore = getFirebaseDb();
-      await updateDoc(doc(firestore, EVENT_DOC_PATH[0], EVENT_DOC_PATH[1]), {
-        prizes: updatedPrizes,
-        updatedAt: serverTimestamp(),
-      });
+      await resetParticipantsDirect();
     } catch (e) {
       console.warn(e);
     }
-
     const socket = getSocket();
-    socket.emit('admin_update_prizes', updatedPrizes);
-    setNewPrizeTitle('');
-    setNewPrizeRank(updatedPrizes.length + 1);
-    setNewPrizeRankLabel('');
-    setNewPrizeHideRank(false);
-    setNewPrizeAdminTag('');
-    setNewPrizeTagColor('');
+    socket.emit('admin_reset_all');
+  };
+
+  // 참가자 개별 1명 삭제
+  const handleDeleteParticipant = async (participantId: string) => {
+    const target = (appState?.participants || []).find((p) => p.id === participantId);
+    const label = target ? `#${String(target.number).padStart(3, '0')} ${target.name}` : '해당';
+    if (!confirm(`${label} 참가자를 명단에서 삭제하시겠습니까?`)) return;
+    try {
+      await deleteParticipantDirect(participantId);
+    } catch (e) {
+      console.warn(e);
+    }
+    const socket = getSocket();
+    socket.emit('admin_delete_participant', { participantId });
+  };
+
+  // 상품 추가
+  const handleAddPrize = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newPrizeTitle.trim()) return;
+
+    const newPrize: Prize = {
+      id: 'prize-' + Date.now(),
+      rank: Number(newPrizeRank),
+      rankLabel: newPrizeRankLabel.trim() || undefined,
+      hideRank: Boolean(newPrizeHideRank),
+      adminTag: newPrizeAdminTag.trim() || undefined,
+      tagColor: newPrizeTagColor.trim() || undefined,
+      title: newPrizeTitle.trim(),
+      count: 1,
+      announced: false,
+      winner: null,
+      absentHistory: [],
+    };
+
+    try {
+      const updatedPrizes = await addPrizeDirect(newPrize);
+      const socket = getSocket();
+      socket.emit('admin_update_prizes', updatedPrizes);
+      setNewPrizeTitle('');
+      setNewPrizeRank(updatedPrizes.length + 1);
+      setNewPrizeRankLabel('');
+      setNewPrizeHideRank(false);
+      setNewPrizeAdminTag('');
+      setNewPrizeTagColor('');
+    } catch (e) {
+      console.warn('상품 추가 실패:', e);
+    }
   };
 
   // 등수 라벨, 숨김 설정 및 관리자 태그 개별 수정
@@ -312,21 +335,15 @@ export function useAdmin() {
 
   // 상품 삭제
   const handleDeletePrize = async (id: string) => {
-    if (!appState || !confirm('이 상품을 삭제하시겠습니까?')) return;
-    const updatedPrizes = appState.prizes.filter((p) => p.id !== id);
+    if (!confirm('이 상품을 삭제하시겠습니까?')) return;
 
     try {
-      const firestore = getFirebaseDb();
-      await updateDoc(doc(firestore, 'lucky_draw_events', 'current_event'), {
-        prizes: updatedPrizes,
-        updatedAt: serverTimestamp(),
-      });
+      const updatedPrizes = await deletePrizeDirect(id);
+      const socket = getSocket();
+      socket.emit('admin_update_prizes', updatedPrizes);
     } catch (e) {
-      console.warn(e);
+      console.warn('상품 삭제 실패:', e);
     }
-
-    const socket = getSocket();
-    socket.emit('admin_update_prizes', updatedPrizes);
   };
 
   // 테마 변경
@@ -345,10 +362,10 @@ export function useAdmin() {
     if (!eventNameInput.trim()) return;
     try {
       const firestore = getFirebaseDb();
-      await updateDoc(doc(firestore, 'lucky_draw_events', 'current_event'), {
+      await updateDoc(doc(firestore, EVENT_DOC_PATH[0], EVENT_DOC_PATH[1]), sanitizeForFirestore({
         eventName: eventNameInput.trim(),
         updatedAt: serverTimestamp(),
-      });
+      }));
       alert('이벤트 타이틀이 저장되었습니다.');
     } catch (e) {
       console.warn(e);
@@ -397,6 +414,8 @@ export function useAdmin() {
     handleGenerateDummies,
     handleResetDraws,
     handleResetAll,
+    handleResetParticipants,
+    handleDeleteParticipant,
     handleAddPrize,
     handleDeletePrize,
     handleThemeChange,

@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { Prize, Participant, DrawState, getRankLabel, getAdminPrizeLabel, getTagColorClass } from '@/types';
-import { Dice5, Play, Sparkles, AlertTriangle, Clock, Users, Search, EyeOff, Tag } from 'lucide-react';
+import { Dice5, Play, Sparkles, AlertTriangle, Clock, Users, Search, EyeOff, Tag, Trash2 } from 'lucide-react';
 
 interface AdminDrawTabProps {
   prizes: Prize[];
@@ -20,6 +20,7 @@ interface AdminDrawTabProps {
   searchQuery: string;
   onSetSearchQuery: (val: string) => void;
   onUpdatePrizeRankConfig?: (prizeId: string, rankLabel?: string, hideRank?: boolean) => void;
+  onDeleteParticipant?: (participantId: string) => void;
 }
 
 export const AdminDrawTab: React.FC<AdminDrawTabProps> = ({
@@ -37,6 +38,7 @@ export const AdminDrawTab: React.FC<AdminDrawTabProps> = ({
   participants,
   searchQuery,
   onSetSearchQuery,
+  onDeleteParticipant,
 }) => {
   const [selectedTag, setSelectedTag] = useState<string>('ALL');
 
@@ -88,20 +90,20 @@ export const AdminDrawTab: React.FC<AdminDrawTabProps> = ({
 
           {/* 행사일 태그 원클릭 필터 바 (30일/31일 구분 시 매우 편리) */}
           {availableTags.length > 0 && (
-            <div className="flex items-center gap-1.5 flex-wrap p-2.5 rounded-xl bg-purple-50/50 border border-purple-100">
-              <span className="text-[11px] font-bold text-purple-900 mr-1 flex items-center gap-1">
-                <Tag className="w-3 h-3 text-purple-600" /> 행사일 필터:
+            <div className="flex items-center gap-1.5 flex-wrap p-2 rounded-xl bg-zinc-50 border border-zinc-200">
+              <span className="text-[11px] font-bold text-zinc-600 mr-1 flex items-center gap-1">
+                <Tag className="w-3 h-3 text-purple-600" /> 행사일:
               </span>
               <button
                 type="button"
                 onClick={() => setSelectedTag('ALL')}
-                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition ${
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
                   selectedTag === 'ALL'
-                    ? 'bg-zinc-900 text-white shadow-sm'
-                    : 'bg-white text-zinc-600 border border-zinc-200 hover:bg-zinc-50'
+                    ? 'bg-zinc-900 text-white shadow-xs'
+                    : 'bg-white text-zinc-600 border border-zinc-200 hover:bg-zinc-100'
                 }`}
               >
-                전체 보기 ({prizes.length})
+                전체 ({prizes.length})
               </button>
               {availableTags.map((tag) => {
                 const count = prizes.filter((p) => p.adminTag === tag).length;
@@ -111,10 +113,10 @@ export const AdminDrawTab: React.FC<AdminDrawTabProps> = ({
                     key={tag}
                     type="button"
                     onClick={() => setSelectedTag(tag)}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition border ${
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition border cursor-pointer ${
                       isSelected
-                        ? 'bg-purple-600 text-white border-purple-600 shadow-sm'
-                        : 'bg-white text-purple-900 border-purple-200 hover:bg-purple-100/60'
+                        ? 'bg-purple-600 text-white border-purple-600 shadow-xs'
+                        : 'bg-white text-purple-900 border-purple-200 hover:bg-purple-50'
                     }`}
                   >
                     {tag} ({count})
@@ -352,9 +354,15 @@ export const AdminDrawTab: React.FC<AdminDrawTabProps> = ({
                   )}
 
                   {absentCount > 0 && (
-                    <div className="mt-2 pt-1.5 border-t border-zinc-200/60 text-[10px] text-red-600">
-                      부재 실격 ({absentCount}명):{' '}
-                      {prize.absentHistory?.map((a) => `#${a.number} ${a.name}`).join(', ')}
+                    <div className="mt-2 pt-1.5 border-t border-zinc-100 flex items-center gap-1.5 text-[10px] text-zinc-500 flex-wrap">
+                      <span className="font-bold text-rose-600 flex items-center gap-0.5">
+                        <AlertTriangle className="w-2.5 h-2.5" /> 부재 실격 {absentCount}명:
+                      </span>
+                      {prize.absentHistory?.map((a) => (
+                        <span key={a.at} className="px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-100 font-mono text-[10px]">
+                          #{String(a.number).padStart(3, '0')} {a.name}
+                        </span>
+                      ))}
                     </div>
                   )}
                 </div>
@@ -362,20 +370,23 @@ export const AdminDrawTab: React.FC<AdminDrawTabProps> = ({
             })}
           </div>
 
-          <div className="p-3 rounded-xl bg-zinc-50 border border-zinc-200 text-xs space-y-1">
-            <span className="font-bold text-zinc-700 text-[11px]">(선택사항) 특정 번호 지정 추첨</span>
+          <div className="p-3 rounded-xl bg-zinc-50 border border-zinc-200 text-xs space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-zinc-600 text-[11px]">특정 번호 수동 추첨 (선택)</span>
+              <span className="text-[10px] text-zinc-400">비워두면 시스템이 무작위 추첨</span>
+            </div>
             <div className="flex gap-2">
               <input
                 type="number"
                 value={manualNumberInput}
                 onChange={(e) => onSetManualNumberInput(e.target.value)}
-                placeholder="비워두면 무작위 추첨됩니다"
+                placeholder="예: 42 (입장번호 입력 시 해당 번호 우선 당첨)"
                 className="flex-1 px-3 py-1.5 rounded-lg bg-white border border-zinc-300 text-zinc-900 text-xs focus:outline-none focus:border-zinc-900"
               />
               {manualNumberInput && (
                 <button
                   onClick={() => onSetManualNumberInput('')}
-                  className="px-2.5 py-1.5 rounded-lg bg-zinc-200 text-zinc-700 text-xs"
+                  className="px-2.5 py-1.5 rounded-lg bg-zinc-200 text-zinc-700 text-xs font-bold hover:bg-zinc-300 transition cursor-pointer"
                 >
                   지우기
                 </button>
@@ -448,6 +459,20 @@ export const AdminDrawTab: React.FC<AdminDrawTabProps> = ({
                       <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-700">
                         출석확인
                       </span>
+                    )}
+                    {onDeleteParticipant && (
+                      <button
+                        type="button"
+                        onClick={() => onDeleteParticipant(p.id)}
+                        className={`p-1 rounded transition cursor-pointer ${
+                          isWinner
+                            ? 'text-zinc-400 hover:text-red-400 hover:bg-zinc-800'
+                            : 'text-zinc-400 hover:text-red-600 hover:bg-red-50'
+                        }`}
+                        title="참가자 삭제"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     )}
                   </div>
                 </div>

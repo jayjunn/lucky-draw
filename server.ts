@@ -69,16 +69,35 @@ function getAppState(): AppState {
   };
 }
 
-// 다음 당첨 후보자 추첨 함수
+// 다음 당첨 후보자 추첨 함수 (중복 당첨 원천 방지)
 function pickNextWinner(rank: number, targetNumber?: number): Participant | null {
   const prize = prizes.find((p) => p.rank === rank);
   if (!prize) return null;
 
-  const wonNumbers = new Set(
-    prizes
-      .filter((p) => p.winner && p.rank !== rank)
-      .map((p) => p.winner!.number)
-  );
+  const wonNumbers = new Set<number>();
+  const wonIds = new Set<string>();
+
+  prizes.forEach((p) => {
+    if (p.rank !== rank) {
+      if (p.winner) {
+        wonNumbers.add(p.winner.number);
+        if (p.winner.id) wonIds.add(p.winner.id);
+      }
+      if (p.winners) {
+        p.winners.forEach((w) => {
+          wonNumbers.add(w.number);
+          if (w.id) wonIds.add(w.id);
+        });
+      }
+    }
+  });
+
+  participants.forEach((p) => {
+    if (p.isWinner && p.isWinner.rank !== rank) {
+      wonNumbers.add(p.number);
+      wonIds.add(p.id);
+    }
+  });
 
   const absentNumbers = new Set(
     participants.filter((p) => p.status === 'ABSENT').map((p) => p.number)
@@ -86,7 +105,7 @@ function pickNextWinner(rank: number, targetNumber?: number): Participant | null
 
   let candidates = participants.filter((p) => {
     if (absentNumbers.has(p.number)) return false;
-    if (!allowDuplicateWin && wonNumbers.has(p.number)) return false;
+    if (!allowDuplicateWin && (wonNumbers.has(p.number) || wonIds.has(p.id))) return false;
     return true;
   });
 
@@ -494,15 +513,41 @@ app.prepare().then(() => {
     socket.on('admin_reset_all', async () => {
       participants = [];
       nextParticipantNumber = 1;
-      prizes = JSON.parse(JSON.stringify(defaultPrizes));
+      // 현재 저장된 상품 목록은 100% 보존하고 당첨 정보만 초기화
+      prizes.forEach((p) => {
+        p.winner = null;
+        p.winners = [];
+        p.announced = false;
+        p.absentHistory = [];
+      });
       drawState = {
         currentRank: null,
         phase: 'IDLE',
         currentWinner: null,
+        currentWinners: [],
         callTimer: null,
       };
       if (timerInterval) clearInterval(timerInterval);
       io.emit('draw_reset', {});
+      io.emit('state_sync', getAppState());
+      await saveEventStateToDb(getAppState());
+    });
+
+    socket.on('admin_delete_participant', async (data: { participantId: string }) => {
+      const targetId = data.participantId;
+      const target = participants.find((p) => p.id === targetId);
+      participants = participants.filter((p) => p.id !== targetId);
+      if (target) {
+        prizes.forEach((prize) => {
+          if (prize.winners) {
+            prize.winners = prize.winners.filter((w) => w.id !== targetId && w.number !== target.number);
+          }
+          if (prize.winner && (prize.winner.id === targetId || prize.winner.number === target.number)) {
+            prize.winner = prize.winners?.[0] || null;
+            prize.announced = Boolean(prize.winner);
+          }
+        });
+      }
       io.emit('state_sync', getAppState());
       await saveEventStateToDb(getAppState());
     });

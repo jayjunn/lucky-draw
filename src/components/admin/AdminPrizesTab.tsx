@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { Prize, getRankLabel, getAdminPrizeLabel, getTagColorClass } from '@/types';
 import { Trophy, Plus, Edit2, Trash2, EyeOff, Tag, ShieldCheck } from 'lucide-react';
-import { getFirebaseDb, EVENT_DOC_PATH } from '@/lib/firebase';
+import { getFirebaseDb, EVENT_DOC_PATH, sanitizeForFirestore, editPrizeDirect } from '@/lib/firebase';
 import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { getSocket } from '@/lib/socket';
 
@@ -63,33 +63,20 @@ export const AdminPrizesTab: React.FC<AdminPrizesTabProps> = ({
   const [editTagColor, setEditTagColor] = useState<string>('');
 
   const handleSaveEditPrize = async (id: string) => {
-    const updatedPrizes = prizes.map((p) => {
-      if (p.id === id) {
-        return {
-          ...p,
-          title: editTitle.trim(),
-          rank: Number(editRank),
-          rankLabel: editRankLabel.trim() || undefined,
-          hideRank: Boolean(editHideRank),
-          adminTag: editAdminTag.trim() || undefined,
-          tagColor: editTagColor.trim() || undefined,
-        };
-      }
-      return p;
-    });
-
     try {
-      const firestore = getFirebaseDb();
-      await updateDoc(doc(firestore, EVENT_DOC_PATH[0], EVENT_DOC_PATH[1]), {
-        prizes: updatedPrizes,
-        updatedAt: serverTimestamp(),
+      const updatedPrizes = await editPrizeDirect(id, {
+        title: editTitle.trim(),
+        rank: Number(editRank),
+        rankLabel: editRankLabel.trim() || undefined,
+        hideRank: Boolean(editHideRank),
+        adminTag: editAdminTag.trim() || undefined,
+        tagColor: editTagColor.trim() || undefined,
       });
+      const socket = getSocket();
+      socket.emit('admin_update_prizes', updatedPrizes);
     } catch (e) {
-      console.warn(e);
+      console.warn('상품 수정 실패:', e);
     }
-
-    const socket = getSocket();
-    socket.emit('admin_update_prizes', updatedPrizes);
     setEditingPrizeId(null);
   };
 
@@ -103,10 +90,10 @@ export const AdminPrizesTab: React.FC<AdminPrizesTabProps> = ({
       );
       try {
         const firestore = getFirebaseDb();
-        await updateDoc(doc(firestore, EVENT_DOC_PATH[0], EVENT_DOC_PATH[1]), {
+        await updateDoc(doc(firestore, EVENT_DOC_PATH[0], EVENT_DOC_PATH[1]), sanitizeForFirestore({
           prizes: updatedPrizes,
           updatedAt: serverTimestamp(),
-        });
+        }));
       } catch (e) {
         console.warn(e);
       }
@@ -198,11 +185,11 @@ export const AdminPrizesTab: React.FC<AdminPrizesTabProps> = ({
         </div>
 
         {/* 옵션 & 빠른 프리셋 */}
-        <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-zinc-200/60 text-xs">
-          <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex flex-wrap items-center justify-between gap-2.5 pt-2.5 border-t border-zinc-200/80 text-xs">
+          <div className="flex items-center gap-3 flex-wrap">
             <div className="flex items-center gap-1">
-              <span className="text-[10px] font-bold text-purple-600 flex items-center gap-0.5">
-                <Tag className="w-2.5 h-2.5" /> 태그 원클릭:
+              <span className="text-[10px] font-bold text-zinc-500 flex items-center gap-0.5">
+                <Tag className="w-2.5 h-2.5 text-purple-600" /> 태그:
               </span>
               {TAG_PRESETS.map((p) => (
                 <button
@@ -212,23 +199,15 @@ export const AdminPrizesTab: React.FC<AdminPrizesTabProps> = ({
                     if (setNewPrizeAdminTag) setNewPrizeAdminTag(p.label);
                     if (setNewPrizeTagColor) setNewPrizeTagColor(p.color);
                   }}
-                  className={`px-2 py-0.5 rounded text-[11px] font-bold transition border ${
-                    p.color === 'blue'
-                      ? 'bg-sky-50 text-sky-700 border-sky-300 hover:bg-sky-100'
-                      : p.color === 'purple'
-                      ? 'bg-purple-50 text-purple-700 border-purple-300 hover:bg-purple-100'
-                      : p.color === 'emerald'
-                      ? 'bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100'
-                      : 'bg-amber-50 text-amber-700 border-amber-300 hover:bg-amber-100'
-                  }`}
+                  className="px-2 py-0.5 rounded text-[11px] font-bold bg-white border border-zinc-200 hover:border-purple-300 text-zinc-700 hover:text-purple-700 transition cursor-pointer"
                 >
                   {p.label}
                 </button>
               ))}
             </div>
 
-            <div className="flex items-center gap-1 pl-2 border-l border-zinc-200">
-              <span className="text-[10px] font-bold text-zinc-400">명칭:</span>
+            <div className="flex items-center gap-1 pl-3 border-l border-zinc-200">
+              <span className="text-[10px] font-bold text-zinc-400">라벨:</span>
               {RANK_LABEL_PRESETS.slice(0, 5).map((preset) => (
                 <button
                   key={preset}
@@ -237,7 +216,7 @@ export const AdminPrizesTab: React.FC<AdminPrizesTabProps> = ({
                     if (setNewPrizeRankLabel) setNewPrizeRankLabel(preset);
                     if (setNewPrizeHideRank) setNewPrizeHideRank(false);
                   }}
-                  className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-white border border-zinc-200 hover:border-zinc-400 text-zinc-700 transition"
+                  className="px-2 py-0.5 rounded text-[11px] font-medium bg-white border border-zinc-200 hover:border-zinc-400 text-zinc-700 transition cursor-pointer"
                 >
                   {preset}
                 </button>
@@ -257,11 +236,11 @@ export const AdminPrizesTab: React.FC<AdminPrizesTabProps> = ({
         </div>
       </form>
 
-      {/* 안내 문구 */}
-      <div className="px-3.5 py-2 rounded-xl bg-purple-50/60 border border-purple-100 text-[11px] text-purple-900 flex items-center justify-between">
+      {/* 안내 문구 (깔끔한 미니멀 스타일) */}
+      <div className="px-3 py-1.5 rounded-lg bg-zinc-50 border border-zinc-200/80 text-[11px] text-zinc-600 flex items-center justify-between">
         <span className="flex items-center gap-1.5">
-          <ShieldCheck className="w-3.5 h-3.5 text-purple-600" />
-          <span><b>관리자 화면 안내:</b> 등수 숨김을 켜더라도 관리자 화면에서는 원래 등수와 30/31 구분 태그가 언제나 또렷하게 보입니다. (전광판 화면과 참가자 모바일 화면에서만 숨겨집니다.)</span>
+          <ShieldCheck className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
+          <span><b>관리자 안내:</b> 등수 숨김을 켜더라도 관리자 콘솔에서는 원래 순서와 구분 태그가 항상 표시됩니다. (전광판 및 모바일 화면에만 비공개)</span>
         </span>
       </div>
 

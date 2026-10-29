@@ -38,6 +38,32 @@ export function getFirebaseDb(): Firestore {
 const EVENT_DOC_ID = process.env.NEXT_PUBLIC_EVENT_DOC_ID || 'current_event';
 export const EVENT_DOC_PATH = ['lucky_draw_events', EVENT_DOC_ID] as const;
 
+/**
+ * Firestore는 undefined 값을 허용하지 않으므로 (Unsupported field value: undefined 오류),
+ * 객체 및 배열 내 모든 undefined 속성을 재귀적으로 안전하게 제거하는 헬퍼 함수
+ * (serverTimestamp 등 FieldValue 및 Date 객체는 온전히 보존)
+ */
+export function sanitizeForFirestore<T>(val: T): T {
+  if (val === null || val === undefined) return val;
+  if (typeof val !== 'object') return val;
+  if (val instanceof Date) return val;
+  // Firestore FieldValue (_methodName 또는 constructor 확인)
+  if ('_methodName' in (val as any)) return val;
+
+  if (Array.isArray(val)) {
+    return val.map((item) => sanitizeForFirestore(item)) as unknown as T;
+  }
+
+  const result: Record<string, any> = {};
+  for (const key of Object.keys(val as any)) {
+    const v = (val as any)[key];
+    if (v !== undefined) {
+      result[key] = sanitizeForFirestore(v);
+    }
+  }
+  return result as T;
+}
+
 // 기본 상품 목록
 const DEFAULT_PRIZES: Prize[] = [
   { id: 'prize-5', rank: 5, title: '스타벅스 e-카드 3만원권', count: 1, announced: false, winner: null, absentHistory: [] },
@@ -331,14 +357,33 @@ export async function announceWinnerDirect(
     const prize = data.prizes.find((p) => p.rank === rank);
     if (!prize) return;
 
-    const targetCount = Math.max(1, count || prize.count || 1);
+    const targetCount = targetNumber ? 1 : Math.max(1, count || prize.count || 1);
 
-    // 이미 당첨된 번호들 수집 (다른 등수)
+    // 1. 이미 당첨된 참가자 ID 및 입장 번호 철저히 수집 (중복 당첨 방지)
     const wonNumbers = new Set<number>();
+    const wonIds = new Set<string>();
+
     data.prizes.forEach((p) => {
+      // 다른 등수의 당첨자들
       if (p.rank !== rank) {
-        if (p.winner) wonNumbers.add(p.winner.number);
-        if (p.winners) p.winners.forEach((w) => wonNumbers.add(w.number));
+        if (p.winner) {
+          wonNumbers.add(p.winner.number);
+          if (p.winner.id) wonIds.add(p.winner.id);
+        }
+        if (p.winners) {
+          p.winners.forEach((w) => {
+            wonNumbers.add(w.number);
+            if (w.id) wonIds.add(w.id);
+          });
+        }
+      }
+    });
+
+    // 2. 참가자 객체에 이미 isWinner가 있는 사람도 수집 (현재 등수 제외)
+    data.participants.forEach((p) => {
+      if (p.isWinner && p.isWinner.rank !== rank) {
+        wonNumbers.add(p.number);
+        wonIds.add(p.id);
       }
     });
 
@@ -346,9 +391,12 @@ export async function announceWinnerDirect(
       data.participants.filter((p) => p.status === 'ABSENT').map((p) => p.number)
     );
 
+    // 중복 당첨 불가 조건: 이미 당첨된 적이 있거나 부재 처리된 사람은 원천 제외
     let candidates = data.participants.filter((p) => {
       if (absentNumbers.has(p.number)) return false;
-      if (!data.allowDuplicateWin && wonNumbers.has(p.number)) return false;
+      if (!data.allowDuplicateWin) {
+        if (wonNumbers.has(p.number) || wonIds.has(p.id)) return false;
+      }
       return true;
     });
 
@@ -357,20 +405,29 @@ export async function announceWinnerDirect(
     }
 
     const chosenParticipants: Participant[] = [];
+    const pickedIds = new Set<string>();
+
+    // 수동 지정 번호가 있는 경우
     if (targetNumber) {
       const specified = candidates.find((p) => p.number === targetNumber);
       if (specified) {
         chosenParticipants.push(specified);
-        candidates = candidates.filter((p) => p.number !== targetNumber);
+        pickedIds.add(specified.id);
+        candidates = candidates.filter((p) => p.id !== specified.id && p.number !== specified.number);
       }
     }
 
-    // 남은 인원수만큼 무작위 셔플 후 선발
+    // 남은 인원수만큼 무작위 셔플 후 엄격하게 중복 없이 선발
     const needCount = targetCount - chosenParticipants.length;
     if (needCount > 0) {
       const shuffled = [...candidates].sort(() => 0.5 - Math.random());
-      const picked = shuffled.slice(0, needCount);
-      chosenParticipants.push(...picked);
+      for (const cand of shuffled) {
+        if (chosenParticipants.length >= targetCount) break;
+        if (!pickedIds.has(cand.id)) {
+          chosenParticipants.push(cand);
+          pickedIds.add(cand.id);
+        }
+      }
     }
 
     if (chosenParticipants.length === 0) {
@@ -411,6 +468,7 @@ export async function announceWinnerDirect(
 
     const chosenIds = new Set(chosenParticipants.map((p) => p.id));
     const updatedParticipants = data.participants.map((p) => {
+      // 새로 당첨된 참가자
       if (chosenIds.has(p.id)) {
         return {
           ...p,
@@ -424,10 +482,18 @@ export async function announceWinnerDirect(
           presenceConfirmed: false,
         };
       }
+      // 해당 등수에 이전에 당첨되어 있던 이전 당첨자 정보는 반드시 초기화 (2명 동시 당첨 버그 방지)
+      if (p.isWinner?.rank === rank) {
+        const { isWinner, ...cleanParticipant } = p;
+        return {
+          ...cleanParticipant,
+          presenceConfirmed: false,
+        };
+      }
       return p;
     });
 
-    transaction.update(eventRef, {
+    transaction.update(eventRef, sanitizeForFirestore({
       prizes: updatedPrizes,
       participants: updatedParticipants,
       drawState: {
@@ -441,7 +507,7 @@ export async function announceWinnerDirect(
         callTimer: 30,
       },
       updatedAt: serverTimestamp(),
-    });
+    }));
   });
 
   // 당첨 로그 추가 (비동기)
@@ -644,13 +710,102 @@ export async function setThemeDirect(theme: ThemeType): Promise<void> {
   await updateDoc(eventRef, { theme, updatedAt: serverTimestamp() });
 }
 
-// 9. 전체 초기화 (데이터 리셋)
+// 9. 전체 리셋 (저장되어 있는 상품 목록은 100% 보존하고 참가자 및 추첨 상태만 초기화)
 export async function resetAllDirect(): Promise<void> {
   const firestore = getFirebaseDb();
   const eventRef = doc(firestore, EVENT_DOC_PATH[0], EVENT_DOC_PATH[1]);
-  await setDoc(eventRef, {
-    ...INITIAL_APP_STATE,
-    updatedAt: serverTimestamp(),
+
+  await runTransaction(firestore, async (transaction) => {
+    const snap = await transaction.get(eventRef);
+    if (!snap.exists()) return;
+
+    const data = snap.data() as AppState;
+
+    // 현재 등록된 상품 커스텀 목록은 그대로 보존 (당첨 정보만 클리어)
+    const preservedPrizes = (data.prizes || []).map((p) => ({
+      ...p,
+      winner: null,
+      winners: [],
+      announced: false,
+      absentHistory: [],
+    }));
+
+    transaction.update(
+      eventRef,
+      sanitizeForFirestore({
+        participants: [],
+        prizes: preservedPrizes,
+        drawState: {
+          currentRank: null,
+          phase: 'IDLE',
+          currentWinner: null,
+          currentWinners: [],
+          callTimer: null,
+        },
+        updatedAt: serverTimestamp(),
+      })
+    );
+  });
+}
+
+// 9-1. 참가자 명단만 리셋 (상품 목록 보존 및 당첨 상태 리셋)
+export async function resetParticipantsDirect(): Promise<void> {
+  await resetAllDirect();
+}
+
+// 9-2. 참가자 개별 1명 삭제
+export async function deleteParticipantDirect(participantId: string): Promise<void> {
+  const firestore = getFirebaseDb();
+  const eventRef = doc(firestore, EVENT_DOC_PATH[0], EVENT_DOC_PATH[1]);
+
+  await runTransaction(firestore, async (transaction) => {
+    const snap = await transaction.get(eventRef);
+    if (!snap.exists()) return;
+
+    const data = snap.data() as AppState;
+    const target = (data.participants || []).find((p) => p.id === participantId);
+    if (!target) return;
+
+    const targetNumber = target.number;
+    const updatedParticipants = (data.participants || []).filter((p) => p.id !== participantId);
+
+    // 삭제된 참가자가 당첨자였다면 경품에서도 당첨 정보 정리
+    const updatedPrizes = (data.prizes || []).map((prize) => {
+      const remainingWinners = (prize.winners || []).filter(
+        (w) => w.id !== participantId && w.number !== targetNumber
+      );
+      const isSingleMatch = prize.winner && (prize.winner.id === participantId || prize.winner.number === targetNumber);
+      return {
+        ...prize,
+        winner: isSingleMatch ? (remainingWinners[0] || null) : prize.winner,
+        winners: remainingWinners,
+        announced: remainingWinners.length > 0,
+      };
+    });
+
+    let updatedDrawState = { ...data.drawState };
+    if (
+      updatedDrawState.currentWinner &&
+      (updatedDrawState.currentWinner.participantId === participantId || updatedDrawState.currentWinner.winnerNumber === targetNumber)
+    ) {
+      updatedDrawState.currentWinner = null;
+      updatedDrawState.phase = 'IDLE';
+    }
+    if (updatedDrawState.currentWinners) {
+      updatedDrawState.currentWinners = updatedDrawState.currentWinners.filter(
+        (w) => w.participantId !== participantId && w.winnerNumber !== targetNumber
+      );
+    }
+
+    transaction.update(
+      eventRef,
+      sanitizeForFirestore({
+        participants: updatedParticipants,
+        prizes: updatedPrizes,
+        drawState: updatedDrawState,
+        updatedAt: serverTimestamp(),
+      })
+    );
   });
 }
 
@@ -730,26 +885,109 @@ export async function updatePrizeRankConfigDirect(
 ): Promise<void> {
   const firestore = getFirebaseDb();
   const eventRef = doc(firestore, EVENT_DOC_PATH[0], EVENT_DOC_PATH[1]);
-  const snap = await getDoc(eventRef);
-  if (!snap.exists()) return;
+  
+  await runTransaction(firestore, async (transaction) => {
+    const snap = await transaction.get(eventRef);
+    if (!snap.exists()) return;
 
-  const data = snap.data() as AppState;
-  const updatedPrizes = (data.prizes || []).map((p) => {
-    if (p.id === prizeId) {
-      return {
-        ...p,
-        rankLabel: rankLabel !== undefined ? (rankLabel.trim() || undefined) : p.rankLabel,
-        hideRank: hideRank !== undefined ? Boolean(hideRank) : p.hideRank,
-        adminTag: adminTag !== undefined ? (adminTag.trim() || undefined) : p.adminTag,
-        tagColor: tagColor !== undefined ? (tagColor.trim() || undefined) : p.tagColor,
-      };
-    }
-    return p;
+    const data = snap.data() as AppState;
+    const updatedPrizes = (data.prizes || []).map((p) => {
+      if (p.id === prizeId) {
+        return {
+          ...p,
+          rankLabel: rankLabel !== undefined ? (rankLabel.trim() || undefined) : p.rankLabel,
+          hideRank: hideRank !== undefined ? Boolean(hideRank) : p.hideRank,
+          adminTag: adminTag !== undefined ? (adminTag.trim() || undefined) : p.adminTag,
+          tagColor: tagColor !== undefined ? (tagColor.trim() || undefined) : p.tagColor,
+        };
+      }
+      return p;
+    });
+
+    transaction.update(eventRef, sanitizeForFirestore({
+      prizes: updatedPrizes,
+      updatedAt: serverTimestamp(),
+    }));
   });
+}
 
-  await updateDoc(eventRef, {
-    prizes: updatedPrizes,
-    updatedAt: serverTimestamp(),
+// 12. 상품 안전 추가 (트랜잭션으로 최신 목록에 원자적 추가하여 덮어쓰기 방지)
+export async function addPrizeDirect(newPrize: Prize): Promise<Prize[]> {
+  const firestore = getFirebaseDb();
+  const eventRef = doc(firestore, EVENT_DOC_PATH[0], EVENT_DOC_PATH[1]);
+
+  return await runTransaction(firestore, async (transaction) => {
+    const snap = await transaction.get(eventRef);
+    if (!snap.exists()) return [newPrize];
+
+    const data = snap.data() as AppState;
+    const existingPrizes = data.prizes || [];
+    const updatedPrizes = [...existingPrizes, newPrize];
+
+    transaction.update(eventRef, sanitizeForFirestore({
+      prizes: updatedPrizes,
+      updatedAt: serverTimestamp(),
+    }));
+
+    return updatedPrizes;
+  });
+}
+
+// 13. 상품 안전 삭제
+export async function deletePrizeDirect(prizeId: string): Promise<Prize[]> {
+  const firestore = getFirebaseDb();
+  const eventRef = doc(firestore, EVENT_DOC_PATH[0], EVENT_DOC_PATH[1]);
+
+  return await runTransaction(firestore, async (transaction) => {
+    const snap = await transaction.get(eventRef);
+    if (!snap.exists()) return [];
+
+    const data = snap.data() as AppState;
+    const updatedPrizes = (data.prizes || []).filter((p) => p.id !== prizeId);
+
+    transaction.update(eventRef, sanitizeForFirestore({
+      prizes: updatedPrizes,
+      updatedAt: serverTimestamp(),
+    }));
+
+    return updatedPrizes;
+  });
+}
+
+// 14. 상품 안전 편집
+export async function editPrizeDirect(
+  prizeId: string,
+  fields: { title?: string; rank?: number; rankLabel?: string; hideRank?: boolean; adminTag?: string; tagColor?: string }
+): Promise<Prize[]> {
+  const firestore = getFirebaseDb();
+  const eventRef = doc(firestore, EVENT_DOC_PATH[0], EVENT_DOC_PATH[1]);
+
+  return await runTransaction(firestore, async (transaction) => {
+    const snap = await transaction.get(eventRef);
+    if (!snap.exists()) return [];
+
+    const data = snap.data() as AppState;
+    const updatedPrizes = (data.prizes || []).map((p) => {
+      if (p.id === prizeId) {
+        return {
+          ...p,
+          title: fields.title !== undefined ? fields.title.trim() : p.title,
+          rank: fields.rank !== undefined ? Number(fields.rank) : p.rank,
+          rankLabel: fields.rankLabel !== undefined ? (fields.rankLabel.trim() || undefined) : p.rankLabel,
+          hideRank: fields.hideRank !== undefined ? Boolean(fields.hideRank) : p.hideRank,
+          adminTag: fields.adminTag !== undefined ? (fields.adminTag.trim() || undefined) : p.adminTag,
+          tagColor: fields.tagColor !== undefined ? (fields.tagColor.trim() || undefined) : p.tagColor,
+        };
+      }
+      return p;
+    });
+
+    transaction.update(eventRef, sanitizeForFirestore({
+      prizes: updatedPrizes,
+      updatedAt: serverTimestamp(),
+    }));
+
+    return updatedPrizes;
   });
 }
 
