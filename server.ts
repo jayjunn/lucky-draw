@@ -470,6 +470,7 @@ app.prepare().then(() => {
     socket.on('admin_reset_draws', async () => {
       prizes.forEach((p) => {
         p.winner = null;
+        p.winners = [];
         p.announced = false;
         p.absentHistory = [];
       });
@@ -482,12 +483,12 @@ app.prepare().then(() => {
         currentRank: null,
         phase: 'IDLE',
         currentWinner: null,
+        currentWinners: [],
         callTimer: null,
       };
       if (timerInterval) clearInterval(timerInterval);
       io.emit('draw_reset', {});
       io.emit('state_sync', getAppState());
-      await saveEventStateToDb(getAppState());
     });
 
     socket.on('admin_reset_all', async () => {

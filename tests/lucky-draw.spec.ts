@@ -249,5 +249,53 @@ test.describe('럭키드로우 전체 E2E 실시간 시나리오 테스트', () 
     await displayContext.close();
   });
 
+  test('당첨 재추첨 버튼 클릭 시 모든 당첨자 정보가 초기화되고 모바일 당첨 상태가 해제되는지 검증', async ({ browser }) => {
+    const mobileContext = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    const mobilePage = await mobileContext.newPage();
+
+    const adminContext = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+    const adminPage = await adminContext.newPage();
+
+    // 1. 모바일 참가자 입장
+    await mobilePage.goto('/');
+    const nameInput = mobilePage.locator('input[placeholder*="이름 또는 닉네임"]');
+    await expect(nameInput).toBeVisible({ timeout: 10000 });
+    const testName = '재추첨테스터_' + Math.floor(Math.random() * 10000);
+    await nameInput.fill(testName);
+    await mobilePage.locator('button:has-text("입장 패스 받기")').click();
+    await expect(mobilePage.locator('text=LUCKY DRAW NUMBER')).toBeVisible({ timeout: 10000 });
+
+    // 2. 어드민에서 5등 추첨 및 당첨 확정
+    await adminPage.goto('/admin');
+    await unlockAdmin(adminPage);
+    await expect(adminPage.locator(`text=${testName}`).first()).toBeVisible({ timeout: 10000 });
+
+    const rollBtn = adminPage.locator('button:has-text("1. 롤링")').first();
+    await rollBtn.click();
+    const announceBtn = adminPage.locator('button:has-text("2. 발표")').first();
+    await announceBtn.click();
+
+    // 모바일에서 당첨 상태(뱃지 및 축하 문구) 확인
+    await expect(mobilePage.locator('text=당첨 확정')).toBeVisible({ timeout: 10000 });
+
+    // 3. 어드민에서 [당첨 재추첨] 클릭 (confirm 대화상자 수락)
+    adminPage.once('dialog', async (dialog) => {
+      await dialog.accept();
+    });
+    const resetDrawsBtn = adminPage.locator('button:has-text("당첨 재추첨")');
+    await resetDrawsBtn.click();
+
+    // 4. 어드민에서 5등 상품이 다시 추첨 대기(1. 롤링 버튼 표시)로 복귀했는지 검증
+    await expect(adminPage.locator('button:has-text("1. 롤링")').first()).toBeVisible({ timeout: 10000 });
+    // 참가자 목록에서 당첨 뱃지(★)가 사라졌는지 확인
+    await expect(adminPage.locator('text=★ 5등 당첨')).not.toBeVisible({ timeout: 5000 });
+
+    // 5. 모바일 화면에서 당첨 뱃지가 사라지고 정상 패스 화면으로 돌아왔는지 검증
+    await expect(mobilePage.locator('text=당첨 확정')).not.toBeVisible({ timeout: 10000 });
+
+    await mobileContext.close();
+    await adminContext.close();
+  });
+
 });
 

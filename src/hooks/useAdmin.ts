@@ -10,6 +10,7 @@ import {
   updatePrizeRankConfigDirect,
   setThemeDirect, 
   resetAllDirect,
+  resetDrawsDirect,
   getFirebaseDb 
 } from '@/lib/firebase';
 import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
@@ -180,20 +181,10 @@ export function useAdmin() {
   const handleResetDraws = async () => {
     if (!confirm('현재까지의 당첨 내역을 모두 초기화하고 다시 추첨하시겠습니까? (참가자 목록은 유지됩니다)')) return;
     try {
-      const firestore = getFirebaseDb();
-      const eventRef = doc(firestore, 'lucky_draw_events', 'current_event');
-      if (appState) {
-        const resetPrizes = appState.prizes.map((p) => ({ ...p, winner: null, announced: false, absentHistory: [] }));
-        const resetParticipants = appState.participants.map((p) => ({ ...p, isWinner: undefined, presenceConfirmed: false }));
-        await updateDoc(eventRef, {
-          prizes: resetPrizes,
-          participants: resetParticipants,
-          drawState: { currentRank: null, phase: 'IDLE', currentWinner: null, callTimer: null },
-          updatedAt: serverTimestamp(),
-        });
-      }
-    } catch (e) {
-      console.warn(e);
+      await resetDrawsDirect();
+    } catch (e: any) {
+      console.error('당첨 재추첨 초기화 실패:', e);
+      alert('초기화 중 오류가 발생했습니다: ' + (e?.message || e));
     }
     const socket = getSocket();
     socket.emit('admin_reset_draws');

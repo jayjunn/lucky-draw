@@ -128,6 +128,8 @@ export function useParticipant() {
           // 내가 당첨자인데 아직 출석 확인을 안 했다면 바로 당첨 화면 띄우기!
           if (found.isWinner && !found.presenceConfirmed) {
             setShowWinnerSheet(true);
+          } else if (!found.isWinner) {
+            setShowWinnerSheet(false);
           }
         } else if (state.participants.length === 0) {
           // 어드민이 명단을 '0명 완전 초기화'했을 때만 세션 클리어!

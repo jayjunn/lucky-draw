@@ -484,7 +484,8 @@ export async function redrawSpecificAbsentDirect(rank: number, absentNumber: num
     // 참가자 실격 처리
     const updatedParticipants = data.participants.map((p) => {
       if (p.number === absentNumber) {
-        return { ...p, status: 'ABSENT' as const, isWinner: undefined, presenceConfirmed: false };
+        const { isWinner, ...cleanParticipant } = p;
+        return { ...cleanParticipant, status: 'ABSENT' as const, presenceConfirmed: false };
       }
       return p;
     });
@@ -649,6 +650,54 @@ export async function resetAllDirect(): Promise<void> {
   await setDoc(eventRef, {
     ...INITIAL_APP_STATE,
     updatedAt: serverTimestamp(),
+  });
+}
+
+// 9-1. 당첨 내역만 초기화 (참가자 명단 유지)
+export async function resetDrawsDirect(): Promise<void> {
+  const firestore = getFirebaseDb();
+  const eventRef = doc(firestore, EVENT_DOC_PATH[0], EVENT_DOC_PATH[1]);
+
+  await runTransaction(firestore, async (transaction) => {
+    const snap = await transaction.get(eventRef);
+    if (!snap.exists()) return;
+
+    const data = snap.data() as AppState;
+
+    // 1. 모든 상품 당첨 정보 및 부재 이력 초기화 (winner, winners, announced, absentHistory)
+    const resetPrizes = (data.prizes || []).map((p) => ({
+      ...p,
+      winner: null,
+      winners: [],
+      announced: false,
+      absentHistory: [],
+    }));
+
+    // 2. 모든 참가자의 당첨 정보(isWinner) 및 출석확인 초기화 (isWinner 속성을 완전히 제거)
+    const resetParticipants = (data.participants || []).map((p) => {
+      const { isWinner, ...cleanParticipant } = p;
+      return {
+        ...cleanParticipant,
+        status: 'ACTIVE' as const,
+        presenceConfirmed: false,
+      };
+    });
+
+    // 3. 추첨 상태 초기화
+    const resetDrawState: DrawState = {
+      currentRank: null,
+      phase: 'IDLE',
+      currentWinner: null,
+      currentWinners: [],
+      callTimer: null,
+    };
+
+    transaction.update(eventRef, {
+      prizes: resetPrizes,
+      participants: resetParticipants,
+      drawState: resetDrawState,
+      updatedAt: serverTimestamp(),
+    });
   });
 }
 
