@@ -216,16 +216,16 @@ export async function registerParticipantDirect(name: string, existingId?: strin
 
     const updatedParticipants = [...currentParticipants, newParticipant];
     if (!snap.exists()) {
-      transaction.set(eventRef, {
+      transaction.set(eventRef, sanitizeForFirestore({
         ...INITIAL_APP_STATE,
         participants: updatedParticipants,
         updatedAt: serverTimestamp(),
-      });
+      }));
     } else {
-      transaction.update(eventRef, {
+      transaction.update(eventRef, sanitizeForFirestore({
         participants: updatedParticipants,
         updatedAt: serverTimestamp(),
-      });
+      }));
     }
 
     return newParticipant;
@@ -299,12 +299,12 @@ export async function confirmPresenceDirect(participantId: string): Promise<void
       return prize;
     });
 
-    transaction.update(eventRef, {
+    transaction.update(eventRef, sanitizeForFirestore({
       participants: updatedParticipants,
       prizes: updatedPrizes,
       drawState: updatedDrawState,
       updatedAt: serverTimestamp(),
-    });
+    }));
   });
 }
 
@@ -323,7 +323,7 @@ export async function startRouletteDirect(rank: number, batchCount: number = 1):
       hideRank = prize.hideRank;
     }
   }
-  await updateDoc(eventRef, {
+  await updateDoc(eventRef, sanitizeForFirestore({
     drawState: {
       currentRank: rank,
       currentRankLabel: rankLabel || '',
@@ -335,7 +335,7 @@ export async function startRouletteDirect(rank: number, batchCount: number = 1):
       callTimer: null,
     },
     updatedAt: serverTimestamp(),
-  });
+  }));
 }
 
 // 5. 어드민 당첨자 발표 (일괄 추첨/다중 당첨 지원 Atomic Transaction)
@@ -649,7 +649,7 @@ export async function redrawSpecificAbsentDirect(rank: number, absentNumber: num
       return w;
     }).filter((w) => w.winnerNumber !== absentNumber || replacedWinner);
 
-    transaction.update(eventRef, {
+    transaction.update(eventRef, sanitizeForFirestore({
       participants: updatedParticipants,
       prizes: updatedPrizes,
       drawState: {
@@ -659,7 +659,7 @@ export async function redrawSpecificAbsentDirect(rank: number, absentNumber: num
         callTimer: 30,
       },
       updatedAt: serverTimestamp(),
-    });
+    }));
   });
 
   // 부재 로그 기록
@@ -707,7 +707,7 @@ export async function sendCheerDirect(emoji: string, name: string): Promise<void
 export async function setThemeDirect(theme: ThemeType): Promise<void> {
   const firestore = getFirebaseDb();
   const eventRef = doc(firestore, EVENT_DOC_PATH[0], EVENT_DOC_PATH[1]);
-  await updateDoc(eventRef, { theme, updatedAt: serverTimestamp() });
+  await updateDoc(eventRef, sanitizeForFirestore({ theme, updatedAt: serverTimestamp() }));
 }
 
 // 9. 전체 리셋 (저장되어 있는 상품 목록은 100% 보존하고 참가자 및 추첨 상태만 초기화)
@@ -831,12 +831,11 @@ export async function resetDrawsDirect(): Promise<void> {
 
     // 2. 모든 참가자의 당첨 정보(isWinner) 및 출석확인 초기화 (isWinner 속성을 완전히 제거)
     const resetParticipants = (data.participants || []).map((p) => {
-      const { isWinner, ...cleanParticipant } = p;
-      return {
-        ...cleanParticipant,
-        status: 'ACTIVE' as const,
-        presenceConfirmed: false,
-      };
+      const copy: Record<string, any> = { ...p };
+      delete copy.isWinner;
+      copy.status = 'ACTIVE';
+      copy.presenceConfirmed = false;
+      return copy as Participant;
     });
 
     // 3. 추첨 상태 초기화
@@ -848,12 +847,15 @@ export async function resetDrawsDirect(): Promise<void> {
       callTimer: null,
     };
 
-    transaction.update(eventRef, {
-      prizes: resetPrizes,
-      participants: resetParticipants,
-      drawState: resetDrawState,
-      updatedAt: serverTimestamp(),
-    });
+    transaction.update(
+      eventRef,
+      sanitizeForFirestore({
+        prizes: resetPrizes,
+        participants: resetParticipants,
+        drawState: resetDrawState,
+        updatedAt: serverTimestamp(),
+      })
+    );
   });
 }
 
@@ -869,10 +871,10 @@ export async function updateEventNoticeDirect(notice: Partial<typeof DEFAULT_EVE
       currentNotice = { ...DEFAULT_EVENT_NOTICE, ...data.notice };
     }
   }
-  await updateDoc(eventRef, {
+  await updateDoc(eventRef, sanitizeForFirestore({
     notice: { ...currentNotice, ...notice },
     updatedAt: serverTimestamp(),
-  });
+  }));
 }
 
 // 11. 상품 등수 커스텀 명칭 및 숨김/관리자 태그 설정 업데이트
