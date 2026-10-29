@@ -171,65 +171,87 @@ export async function registerParticipantDirect(name: string, existingId?: strin
   const firestore = getFirebaseDb();
   const eventRef = doc(firestore, EVENT_DOC_PATH[0], EVENT_DOC_PATH[1]);
 
-  return await runTransaction(firestore, async (transaction) => {
-    const snap = await transaction.get(eventRef);
+  try {
+    return await runTransaction(firestore, async (transaction) => {
+      const snap = await transaction.get(eventRef);
 
-    let currentParticipants: Participant[] = [];
-    if (snap.exists()) {
-      const data = snap.data() as AppState;
-      currentParticipants = data.participants || [];
+      let currentParticipants: Participant[] = [];
+      if (snap.exists()) {
+        const data = snap.data() as AppState;
+        currentParticipants = data.participants || [];
+      }
+
+      // 기존 등록자 재접속 확인 (존재하지 않으면 절대 자동 생성하지 않고 null 반환!)
+      if (existingId) {
+        const found = currentParticipants.find((p) => p.id === existingId);
+        if (found) return found;
+        return null; // DB에 없으면(초기화된 상태) 새 번호를 만들지 않음
+      }
+
+      // 이름 유효성 검사 (최소 2글자 이상)
+      const cleanName = name.trim();
+      if (cleanName.length < 2) {
+        throw new Error('이름(닉네임)은 최소 2글자 이상 입력해주세요.');
+      }
+
+      // 중복 닉네임 원자적 검사 (동일 이름 중복 시 새 번호를 발급하지 않고 기존 등록자 정보 반환)
+      const normalized = cleanName.toLowerCase();
+      const existingParticipant = currentParticipants.find(
+        (p) => p.name.trim().toLowerCase() === normalized
+      );
+      if (existingParticipant) {
+        return existingParticipant;
+      }
+
+      // 신규 번호 원자적(Atomic) 채번
+      const maxNumber = currentParticipants.reduce((max, p) => Math.max(max, p.number || 0), 0);
+      const nextNumber = maxNumber + 1;
+      const newParticipant: Participant = {
+        id: 'user_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 7),
+        number: nextNumber,
+        name: cleanName,
+        registeredAt: Date.now(),
+        status: 'ACTIVE',
+        presenceConfirmed: false,
+      };
+
+      const updatedParticipants = [...currentParticipants, newParticipant];
+      if (!snap.exists()) {
+        transaction.set(eventRef, sanitizeForFirestore({
+          ...INITIAL_APP_STATE,
+          participants: updatedParticipants,
+          updatedAt: serverTimestamp(),
+        }));
+      } else {
+        transaction.update(eventRef, sanitizeForFirestore({
+          participants: updatedParticipants,
+          updatedAt: serverTimestamp(),
+        }));
+      }
+
+      return newParticipant;
+    });
+  } catch (txError: any) {
+    console.warn('트랜잭션 실행 중 예외 발생, 직접 조회 및 복구 시도:', txError);
+    // 모바일 네트워크 순단/타임아웃으로 트랜잭션 응답이 누락되었으나
+    // 실제로는 Firestore 백엔드에 이미 정상 반영되었는지 직접 getDoc으로 검증
+    try {
+      const snap = await getDoc(eventRef);
+      if (snap.exists()) {
+        const data = snap.data() as AppState;
+        const normalized = name.trim().toLowerCase();
+        const found = (data.participants || []).find(
+          (p) => p.name.trim().toLowerCase() === normalized
+        );
+        if (found) {
+          return found;
+        }
+      }
+    } catch (fallbackError) {
+      console.warn('직접 복구 조회 실패:', fallbackError);
     }
-
-    // 기존 등록자 재접속 확인 (존재하지 않으면 절대 자동 생성하지 않고 null 반환!)
-    if (existingId) {
-      const found = currentParticipants.find((p) => p.id === existingId);
-      if (found) return found;
-      return null; // DB에 없으면(초기화된 상태) 새 번호를 만들지 않음
-    }
-
-    // 이름 유효성 검사 (최소 2글자 이상)
-    const cleanName = name.trim();
-    if (cleanName.length < 2) {
-      throw new Error('이름(닉네임)은 최소 2글자 이상 입력해주세요.');
-    }
-
-    // 중복 닉네임 원자적 검사 (동일 이름 중복 시 새 번호를 발급하지 않고 기존 등록자 정보 반환)
-    const normalized = cleanName.toLowerCase();
-    const existingParticipant = currentParticipants.find(
-      (p) => p.name.trim().toLowerCase() === normalized
-    );
-    if (existingParticipant) {
-      return existingParticipant;
-    }
-
-    // 신규 번호 원자적(Atomic) 채번
-    const maxNumber = currentParticipants.reduce((max, p) => Math.max(max, p.number || 0), 0);
-    const nextNumber = maxNumber + 1;
-    const newParticipant: Participant = {
-      id: 'user_' + Math.random().toString(36).substring(2, 9),
-      number: nextNumber,
-      name: cleanName,
-      registeredAt: Date.now(),
-      status: 'ACTIVE',
-      presenceConfirmed: false,
-    };
-
-    const updatedParticipants = [...currentParticipants, newParticipant];
-    if (!snap.exists()) {
-      transaction.set(eventRef, sanitizeForFirestore({
-        ...INITIAL_APP_STATE,
-        participants: updatedParticipants,
-        updatedAt: serverTimestamp(),
-      }));
-    } else {
-      transaction.update(eventRef, sanitizeForFirestore({
-        participants: updatedParticipants,
-        updatedAt: serverTimestamp(),
-      }));
-    }
-
-    return newParticipant;
-  });
+    throw txError;
+  }
 }
 
 // 3. 참가자 현장 출석 확인 (Atomic Transaction)

@@ -8,8 +8,11 @@ import {
   subscribeAppState, 
   registerParticipantDirect, 
   confirmPresenceDirect, 
-  sendCheerDirect 
+  sendCheerDirect,
+  getFirebaseDb,
+  EVENT_DOC_PATH
 } from '@/lib/firebase';
+import { doc, getDoc } from 'firebase/firestore';
 
 export interface ThemeStyleConfig {
   accent: string;
@@ -18,6 +21,111 @@ export interface ThemeStyleConfig {
   glow: string;
   badge: string;
   tag: string;
+}
+
+// 다중 계층 세션 저장소 (URL Query + LocalStorage + SessionStorage + Cookie)
+function saveParticipantSession(p: Participant) {
+  if (typeof window === 'undefined') return;
+
+  // 1. LocalStorage
+  try {
+    localStorage.setItem('lucky_draw_participant_id', p.id);
+    localStorage.setItem('lucky_draw_participant_name', p.name);
+    localStorage.setItem('lucky_draw_participant_number', p.number.toString());
+  } catch {}
+
+  // 2. SessionStorage
+  try {
+    sessionStorage.setItem('lucky_draw_participant_id', p.id);
+    sessionStorage.setItem('lucky_draw_participant_name', p.name);
+    sessionStorage.setItem('lucky_draw_participant_number', p.number.toString());
+  } catch {}
+
+  // 3. Document Cookie (7일간 유효, 인앱 브라우저 및 Safari Private 모드 대응)
+  try {
+    document.cookie = `lucky_draw_pid=${encodeURIComponent(p.id)}; path=/; max-age=604800; SameSite=Lax`;
+    document.cookie = `lucky_draw_pname=${encodeURIComponent(p.name)}; path=/; max-age=604800; SameSite=Lax`;
+  } catch {}
+
+  // 4. URL Query Param (?p=user_xxx) - 브라우저 새로고침(F5) 시 100% 영구 보존
+  try {
+    const url = new URL(window.location.href);
+    if (url.searchParams.get('p') !== p.id) {
+      url.searchParams.set('p', p.id);
+      window.history.replaceState(null, '', url.toString());
+    }
+  } catch {}
+}
+
+function clearParticipantSession() {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.removeItem('lucky_draw_participant_id');
+    localStorage.removeItem('lucky_draw_participant_name');
+    localStorage.removeItem('lucky_draw_participant_number');
+  } catch {}
+  try {
+    sessionStorage.removeItem('lucky_draw_participant_id');
+    sessionStorage.removeItem('lucky_draw_participant_name');
+    sessionStorage.removeItem('lucky_draw_participant_number');
+  } catch {}
+  try {
+    document.cookie = 'lucky_draw_pid=; path=/; max-age=0; SameSite=Lax';
+    document.cookie = 'lucky_draw_pname=; path=/; max-age=0; SameSite=Lax';
+  } catch {}
+  try {
+    const url = new URL(window.location.href);
+    if (url.searchParams.has('p')) {
+      url.searchParams.delete('p');
+      window.history.replaceState(null, '', url.toString());
+    }
+  } catch {}
+}
+
+function getSavedParticipantInfo(): { targetId: string | null; targetName: string | null } {
+  if (typeof window === 'undefined') return { targetId: null, targetName: null };
+
+  // 1. URL 쿼리 파라미터 우선 확인 (?p=xxx 또는 ?name=xxx)
+  let urlId: string | null = null;
+  let urlName: string | null = null;
+  try {
+    const params = new URLSearchParams(window.location.search);
+    urlId = params.get('p');
+    urlName = params.get('name');
+  } catch {}
+
+  // 2. LocalStorage
+  let localId: string | null = null;
+  let localName: string | null = null;
+  try {
+    localId = localStorage.getItem('lucky_draw_participant_id');
+    localName = localStorage.getItem('lucky_draw_participant_name');
+  } catch {}
+
+  // 3. SessionStorage
+  let sessId: string | null = null;
+  let sessName: string | null = null;
+  try {
+    sessId = sessionStorage.getItem('lucky_draw_participant_id');
+    sessName = sessionStorage.getItem('lucky_draw_participant_name');
+  } catch {}
+
+  // 4. Cookie
+  let cookieId: string | null = null;
+  let cookieName: string | null = null;
+  try {
+    const cookies = document.cookie.split(';');
+    for (const c of cookies) {
+      const [k, v] = c.trim().split('=');
+      if (k === 'lucky_draw_pid' && v) cookieId = decodeURIComponent(v);
+      if (k === 'lucky_draw_pname' && v) cookieName = decodeURIComponent(v);
+    }
+  } catch {}
+
+  const targetId = urlId || localId || sessId || cookieId || null;
+  const targetName = urlName || localName || sessName || cookieName || null;
+
+  return { targetId, targetName };
 }
 
 export const THEME_STYLES: Record<ThemeType, ThemeStyleConfig> = {
@@ -100,12 +208,10 @@ export function useParticipant() {
     const unsubscribe = subscribeAppState((state: AppState) => {
       setAppState(state);
 
-      // 세션 참가자 매칭: ID 또는 Name으로 안전하게 복구
-      const currentSavedId = typeof window !== 'undefined' ? localStorage.getItem('lucky_draw_participant_id') : null;
-      const currentSavedName = typeof window !== 'undefined' ? localStorage.getItem('lucky_draw_participant_name') : null;
-
-      const targetId = participantRef.current?.id || currentSavedId;
-      const targetName = participantRef.current?.name || currentSavedName;
+      // 세션 참가자 매칭: 다중 계층 세션 저장소에서 안전하게 복구
+      const { targetId: savedId, targetName: savedName } = getSavedParticipantInfo();
+      const targetId = participantRef.current?.id || savedId;
+      const targetName = participantRef.current?.name || savedName;
 
       let currentMe: Participant | null = null;
       if (targetId || targetName) {
@@ -118,12 +224,7 @@ export function useParticipant() {
           currentMe = found;
           setParticipant(found);
           participantRef.current = found;
-
-          try {
-            localStorage.setItem('lucky_draw_participant_id', found.id);
-            localStorage.setItem('lucky_draw_participant_name', found.name);
-            localStorage.setItem('lucky_draw_participant_number', found.number.toString());
-          } catch {}
+          saveParticipantSession(found);
 
           // 내가 당첨자인데 아직 출석 확인을 안 했다면 바로 당첨 화면 띄우기!
           if (found.isWinner && !found.presenceConfirmed) {
@@ -135,11 +236,7 @@ export function useParticipant() {
           // 어드민이 명단을 '0명 완전 초기화'했을 때만 세션 클리어!
           setParticipant(null);
           participantRef.current = null;
-          try {
-            localStorage.removeItem('lucky_draw_participant_id');
-            localStorage.removeItem('lucky_draw_participant_name');
-            localStorage.removeItem('lucky_draw_participant_number');
-          } catch {}
+          clearParticipantSession();
         }
       }
 
@@ -252,26 +349,47 @@ export function useParticipant() {
     }
   }, [participant]);
 
+  // 최초 진입 시 저장된 이름이 있으면 자동 채우기 및 복구 시도
+  useEffect(() => {
+    if (typeof window !== 'undefined' && !participant) {
+      const { targetName } = getSavedParticipantInfo();
+      if (targetName && !nameInput) {
+        setNameInput(targetName);
+      }
+    }
+  }, [participant]);
+
   // 기존 참가자 패스 즉시 복구 핸들러
-  const handleRecoverParticipant = useCallback((targetName: string) => {
+  const handleRecoverParticipant = useCallback(async (targetName: string) => {
     const clean = targetName.trim().toLowerCase();
     if (!clean) return false;
 
-    const existing = (appState?.participants || []).find(
+    // 1. 메모리상의 appState에서 검색
+    let existing = (appState?.participants || []).find(
       (p) => p.name.trim().toLowerCase() === clean
     );
+
+    // 2. 만약 메모리에 없다면 Firestore 직접 조회 시도 (새로고침 직후 등)
+    if (!existing) {
+      try {
+        const firestore = getFirebaseDb();
+        const eventRef = doc(firestore, EVENT_DOC_PATH[0], EVENT_DOC_PATH[1]);
+        const snap = await getDoc(eventRef);
+        if (snap.exists()) {
+          const data = snap.data() as AppState;
+          existing = (data.participants || []).find(
+            (p) => p.name.trim().toLowerCase() === clean
+          );
+        }
+      } catch (e) {
+        console.warn('패스 복구 직접 조회 실패:', e);
+      }
+    }
 
     if (existing) {
       setParticipant(existing);
       participantRef.current = existing;
-
-      try {
-        localStorage.setItem('lucky_draw_participant_id', existing.id);
-        localStorage.setItem('lucky_draw_participant_name', existing.name);
-        localStorage.setItem('lucky_draw_participant_number', existing.number.toString());
-      } catch (storageErr) {
-        console.warn('LocalStorage 저장 제한:', storageErr);
-      }
+      saveParticipantSession(existing);
 
       try {
         soundFX.playFanfare();
@@ -300,28 +418,25 @@ export function useParticipant() {
       (p) => p.name.trim().toLowerCase() === clean.toLowerCase()
     );
     if (existing) {
-      handleRecoverParticipant(clean);
+      await handleRecoverParticipant(clean);
       return;
     }
 
     try {
       setIsSubmitting(true);
-      try {
-        localStorage.setItem('lucky_draw_participant_name', clean);
-      } catch {}
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem('lucky_draw_participant_name', clean);
+          sessionStorage.setItem('lucky_draw_participant_name', clean);
+          document.cookie = `lucky_draw_pname=${encodeURIComponent(clean)}; path=/; max-age=604800; SameSite=Lax`;
+        } catch {}
+      }
 
       const newPart = await registerParticipantDirect(clean);
       if (newPart) {
         setParticipant(newPart);
         participantRef.current = newPart;
-
-        try {
-          localStorage.setItem('lucky_draw_participant_id', newPart.id);
-          localStorage.setItem('lucky_draw_participant_name', newPart.name);
-          localStorage.setItem('lucky_draw_participant_number', newPart.number.toString());
-        } catch (storageErr) {
-          console.warn('LocalStorage 저장 제한:', storageErr);
-        }
+        saveParticipantSession(newPart);
 
         try {
           soundFX.playFanfare();
@@ -330,15 +445,32 @@ export function useParticipant() {
         setNameInput('');
       }
     } catch (err: any) {
-      console.error('등록 실패:', err);
-      const retryExisting = (appState?.participants || []).find(
-        (p) => p.name.trim().toLowerCase() === clean.toLowerCase()
-      );
-      if (retryExisting) {
-        handleRecoverParticipant(clean);
-        setNameInput('');
-        return;
+      console.warn('등록 1차 처리 중 예외 발생, 백엔드 직접 조회 복구 시도:', err);
+      // 모바일 환경에서 네트워크 순단/타임아웃 등으로 에러가 발생했더라도,
+      // 백엔드 Firestore에 이미 등록되었는지 최신 데이터를 직접 확인!
+      try {
+        const firestore = getFirebaseDb();
+        const eventRef = doc(firestore, EVENT_DOC_PATH[0], EVENT_DOC_PATH[1]);
+        const snap = await getDoc(eventRef);
+        if (snap.exists()) {
+          const data = snap.data() as AppState;
+          const found = (data.participants || []).find(
+            (p) => p.name.trim().toLowerCase() === clean.toLowerCase()
+          );
+          if (found) {
+            setParticipant(found);
+            participantRef.current = found;
+            saveParticipantSession(found);
+            setNameInput('');
+            try { soundFX.playFanfare(); } catch {}
+            Haptic.success();
+            return;
+          }
+        }
+      } catch (recoverErr) {
+        console.warn('직접 복구 조회 실패:', recoverErr);
       }
+
       Haptic.warning();
       alert('입장권 발급 오류: ' + (err?.message || '네트워크 상태를 확인해주세요.'));
     } finally {
